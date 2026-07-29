@@ -1,0 +1,19 @@
+{
+  "name": "lectores-parroquia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Planificador de lectores y celebraciones de la parroquia",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test/server.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.4.2",
+    "mongodb": "^6.21.0"
+  }
+}

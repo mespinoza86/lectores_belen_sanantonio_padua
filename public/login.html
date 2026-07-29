@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#315f50">
+  <title>Administrador · Lectores</title>
+  <link rel="stylesheet" href="/private/styles.css">
+</head>
+<body class="login-page">
+  <main class="login-main">
+    <section class="login-card">
+      <a class="back-link" href="/">← Volver al modo lectura</a>
+      <div class="login-mark">✦</div>
+      <p class="eyebrow">ACCESO PROTEGIDO</p>
+      <h1>Modo administrador</h1>
+      <p class="login-copy">Ingresa la contraseña administrativa para editar lectores, misas y asignaciones.</p>
+      <form id="loginForm" class="login-form">
+        <label for="password">Contraseña</label>
+        <div class="password-field">
+          <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+          <button type="button" id="togglePassword" class="text-btn">Mostrar</button>
+        </div>
+        <p id="loginError" class="login-error" role="alert" aria-live="polite"></p>
+        <button class="primary" type="submit">Entrar como administrador</button>
+      </form>
+    </section>
+  </main>
+  <script src="/private/js/login.js"></script>
+</body>
+</html>
