@@ -3,25 +3,97 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const dns = require('dns');
 const bcrypt = require('bcrypt');
 const { MongoClient } = require('mongodb');
-
-const DNS_SERVERS = process.env.DNS_SERVERS?.split(',').map(server => server.trim()).filter(Boolean);
-if (DNS_SERVERS?.length) dns.setServers(DNS_SERVERS);
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC = path.join(__dirname, 'public');
 const PRIVATE = path.join(__dirname, 'private');
 const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_HOSTS = process.env.MONGODB_HOSTS;
 const DB_NAME = process.env.MONGODB_DB || 'lectores_parroquia';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const DEFAULT_READER_PASSWORD = '11111111';
+const TEMPORARY_PASSWORD_LENGTH = 12;
+const TEMPORARY_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 const SESSION_TTL = 8 * 60 * 60 * 1000;
+const PASSWORD_FAILURE_LIMIT = 10;
+const PASSWORD_BLOCK_MS = 10 * 60 * 1000;
 const APP_TIME_ZONE = 'America/Costa_Rica';
 const loginAttempts = new Map();
 let client;
 let database;
+
+function mongoConnectionUri() {
+  if (!MONGODB_URI?.startsWith('mongodb+srv://') || !MONGODB_HOSTS) return MONGODB_URI;
+
+  const srvUri = new URL(MONGODB_URI);
+  const options = new URLSearchParams(srvUri.search);
+  options.set('tls', 'true');
+  options.set('authSource', options.get('authSource') || 'admin');
+  options.set('replicaSet', options.get('replicaSet') || 'atlas-13r116-shard-0');
+  const credentials = srvUri.username
+    ? `${srvUri.username}${srvUri.password ? `:${srvUri.password}` : ''}@`
+    : '';
+  return `mongodb://${credentials}${MONGODB_HOSTS}${srvUri.pathname}?${options}`;
+}
+
+function passwordBlockedError(blockedUntil) {
+  const error = new Error('Demasiados intentos incorrectos. Inténtalo nuevamente en 10 minutos.');
+  error.statusCode = 429;
+  error.retryAfter = Math.max(1, Math.ceil((blockedUntil.getTime() - Date.now()) / 1000));
+  return error;
+}
+async function ensurePasswordAttemptAllowed(action, targetId) {
+  const attempt = await database.collection('auth_rate_limits').findOne({ action, targetId });
+  if (attempt?.blockedUntil && attempt.blockedUntil > new Date()) {
+    throw passwordBlockedError(attempt.blockedUntil);
+  }
+}
+async function registerPasswordFailure(action, targetId) {
+  const collection = database.collection('auth_rate_limits');
+  const now = new Date();
+  await collection.updateOne(
+    { action, targetId, blockedUntil: { $lte: now } },
+    { $set: { failures: 0 }, $unset: { blockedUntil: '' } }
+  );
+  const attempt = await collection.findOneAndUpdate(
+    { action, targetId },
+    {
+      $inc: { failures: 1 },
+      $set: {
+        lastFailedAt: now,
+        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      },
+      $setOnInsert: { createdAt: now }
+    },
+    { upsert: true, returnDocument: 'after' }
+  );
+  if (attempt.failures >= PASSWORD_FAILURE_LIMIT) {
+    const blockedUntil = new Date(now.getTime() + PASSWORD_BLOCK_MS);
+    await collection.updateOne(
+      { action, targetId },
+      {
+        $set: {
+          failures: 0,
+          blockedUntil,
+          expiresAt: new Date(blockedUntil.getTime() + 24 * 60 * 60 * 1000)
+        }
+      }
+    );
+    throw passwordBlockedError(blockedUntil);
+  }
+}
+async function clearPasswordFailures(action, targetId) {
+  await database.collection('auth_rate_limits').deleteOne({ action, targetId });
+}
+function passwordRouteError(res, error) {
+  if (error.statusCode === 429) {
+    res.setHeader('Retry-After', String(error.retryAfter));
+    return json(res, 429, { error: error.message });
+  }
+  return json(res, 400, { error: error.message });
+}
 
 function securityHeaders() {
   return {
@@ -79,9 +151,10 @@ function adminSession(req) {
   if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return false;
   try { return JSON.parse(Buffer.from(payload, 'base64url').toString()).expiresAt > Date.now(); } catch { return false; }
 }
-function setSessionCookie(res, token, maxAge = SESSION_TTL / 1000) {
+function setSessionCookie(res, token, maxAge = null) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `admin_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`);
+  const lifetime = maxAge === null ? '' : `; Max-Age=${maxAge}`;
+  res.setHeader('Set-Cookie', `admin_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/${lifetime}${secure}`);
 }
 function passwordMatches(value) {
   const expected = crypto.createHash('sha256').update(ADMIN_PASSWORD || '').digest();
@@ -93,6 +166,10 @@ function legacyReaderPasswordHash(value = DEFAULT_READER_PASSWORD) {
 }
 async function readerPasswordHash(value = DEFAULT_READER_PASSWORD) {
   return bcrypt.hash(String(value), 12);
+}
+function temporaryReaderPassword() {
+  return Array.from({ length: TEMPORARY_PASSWORD_LENGTH }, () =>
+    TEMPORARY_PASSWORD_ALPHABET[crypto.randomInt(TEMPORARY_PASSWORD_ALPHABET.length)]).join('');
 }
 async function readerPasswordMatches(reader, value) {
   const stored = reader.passwordHash || legacyReaderPasswordHash();
@@ -112,7 +189,14 @@ function validateReader(input) {
   const availability = Array.isArray(input.availability)
     ? [...new Set(input.availability.map(id => cleanText(id, 80)).filter(Boolean))]
     : [];
-  return { name, phone: cleanText(input.phone, 40), notes: cleanText(input.notes, 300), availability, active: input.active !== false };
+  return {
+    name,
+    phone: cleanText(input.phone, 40),
+    notes: cleanText(input.notes, 300),
+    availability,
+    active: input.active !== false,
+    substituteOnly: input.substituteOnly === true
+  };
 }
 function validateMass(input) {
   const name = cleanText(input.name);
@@ -135,25 +219,20 @@ async function validateAssignment(input) {
     database.collection('masses').findOne({ id: massId }),
     database.collection('readers').findOne({ id: readerId })
   ]);
-  if (!mass || !reader || !month || !mass.roles.includes(role)) throw new Error('Asignación inválida');
-  if (!(reader.availability || []).includes(massId)) throw new Error('El lector no está disponible para esta misa');
-  const [readerAssignments, substituteInOtherMass] = await Promise.all([
-    database.collection('assignments').find({ month, readerId }).toArray(),
-    database.collection('assignments').findOne({ month, massId: { $ne: massId }, substituteIds: readerId })
-  ]);
-  const hasOtherAssignment = readerAssignments.some(item => {
-    const itemDate = item.date || null;
-    if (item.massId !== massId) return true;
-    if (!date || !itemDate) return item.role !== role || itemDate !== date;
-    return itemDate === date && item.role !== role;
-  });
-  if (hasOtherAssignment || substituteInOtherMass) throw new Error('Este lector ya pertenece a otra misa durante este mes');
+  if (!mass || !reader?.active || reader.substituteOnly || !month || !mass.roles.includes(role)) {
+    throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : 'Asignación inválida');
+  }
   return { massId, readerId, role, month, date, substituteIds };
 }
 function publicDoc(document, hidePrivateReaderData = false) {
   if (!document) return document;
   const { _id, passwordHash, ...value } = document;
-  if (hidePrivateReaderData) delete value.phone;
+  if (hidePrivateReaderData) {
+    delete value.phone;
+    delete value.mustChangePassword;
+    delete value.passwordChangedAt;
+    delete value.passwordResetAt;
+  }
   return value;
 }
 
@@ -190,6 +269,30 @@ function rotationRoles(roles) {
   return [...roles].sort((a, b) => priority(a) - priority(b));
 }
 
+function assertReadersBelongToSingleMass(assignments) {
+  const titularMassByReader = new Map();
+  const substituteMassByReader = new Map();
+  for (const assignment of assignments) {
+    if (assignment.readerId) {
+      const titularMass = titularMassByReader.get(assignment.readerId);
+      if ((titularMass && titularMass !== assignment.massId) || substituteMassByReader.has(assignment.readerId)) {
+        throw new Error('La planificación intentó usar un titular en otra misa o también como suplente');
+      }
+      titularMassByReader.set(assignment.readerId, assignment.massId);
+    }
+    for (const readerId of assignment.substituteIds || []) {
+      if (titularMassByReader.has(readerId)) {
+        throw new Error('La planificación intentó usar a un titular también como suplente');
+      }
+      const assignedMass = substituteMassByReader.get(readerId);
+      if (assignedMass && assignedMass !== assignment.massId) {
+        throw new Error('La planificación intentó colocar a un suplente en más de una misa');
+      }
+      substituteMassByReader.set(readerId, assignment.massId);
+    }
+  }
+}
+
 async function randomAssignments(month) {
   if (!/^\d{4}-\d{2}$/.test(month || '')) throw new Error('Mes inválido');
   const [masses, readers, history] = await Promise.all([
@@ -198,7 +301,13 @@ async function randomAssignments(month) {
     database.collection('assignments').find({ month: { $lt: month } }).sort({ month: 1, date: 1 }).toArray()
   ]);
   const readerById = new Map(readers.map(reader => [reader.id, reader]));
-  const slots = masses.flatMap(mass => mass.roles.map(role => ({ id: `${mass.id}:${role}`, mass, role })));
+  const roleSlots = masses.flatMap(mass => rotationRoles(mass.roles).map(role => ({
+    id: `${mass.id}:${role}`, mass, role
+  })));
+  const substituteSlots = masses.map(mass => ({
+    id: `${mass.id}:__substitute__`, mass, role: null, isSubstitute: true
+  }));
+  const slots = [...roleSlots, ...substituteSlots];
   const [year, monthNumber] = month.split('-').map(Number);
   const previousMonth = `${monthNumber === 1 ? year - 1 : year}-${String(monthNumber === 1 ? 12 : monthNumber - 1).padStart(2, '0')}`;
   const previousTitulars = new Set(history.filter(item => item.month === previousMonth).map(item => item.readerId));
@@ -220,13 +329,17 @@ async function randomAssignments(month) {
   slots.forEach((slot, index) => addEdge(slotOffset + index, sink, 1, 0));
   readers.forEach((reader, readerIndex) => slots.forEach((slot, slotIndex) => {
     if (!(reader.availability || []).includes(slot.mass.id)) return;
+    if (reader.substituteOnly && !slot.isSubstitute) return;
     const past = titleHistory.get(reader.id);
     const sameMassCount = past.filter(item => item.massId === slot.mass.id).length;
-    const cost =
-      (previousTitulars.has(reader.id) ? 1_000_000 : 0) +
-      (previousSubstitutes.has(reader.id) ? -100_000 : 0) +
-      (lastTitle.get(reader.id)?.massId === slot.mass.id ? 10_000 : 0) +
-      past.length * 100 + sameMassCount * 25 + Math.floor(Math.random() * 10);
+    const cost = slot.isSubstitute
+      ? (previousTitulars.has(reader.id) ? -100_000 : 0) +
+        (previousSubstitutes.has(reader.id) ? 10_000 : 0) +
+        past.length * 10 + Math.floor(Math.random() * 10)
+      : (previousTitulars.has(reader.id) ? 1_000_000 : 0) +
+        (previousSubstitutes.has(reader.id) ? -100_000 : 0) +
+        (lastTitle.get(reader.id)?.massId === slot.mass.id ? 10_000 : 0) +
+        past.length * 100 + sameMassCount * 25 + Math.floor(Math.random() * 10);
     addEdge(readerOffset + readerIndex, slotOffset + slotIndex, 1, cost, true);
   }));
 
@@ -264,38 +377,47 @@ async function randomAssignments(month) {
     }
   }));
 
-  const plans = new Map(masses.map(mass => [mass.id, { mass, substituteIds: [] }]));
-  const used = new Set(slotReader.values());
-  // Los titulares del mes anterior pasan primero a una banca de suplentes.
-  const benchReaders = shuffled(readers.filter(reader => !used.has(reader.id))).sort((a, b) =>
-    Number(previousTitulars.has(b.id)) - Number(previousTitulars.has(a.id)) ||
-    titleHistory.get(a.id).length - titleHistory.get(b.id).length);
-  for (const reader of benchReaders) {
-    const compatible = shuffled(masses.filter(mass => (reader.availability || []).includes(mass.id)))
-      .sort((a, b) => plans.get(a.id).substituteIds.length - plans.get(b.id).substituteIds.length ||
-        Number(lastTitle.get(reader.id)?.massId === a.id) - Number(lastTitle.get(reader.id)?.massId === b.id));
-    if (!compatible.length) continue;
-    plans.get(compatible[0].id).substituteIds.push(reader.id);
-    used.add(reader.id);
+  const plans = new Map(masses.map(mass => {
+    const substituteId = slotReader.get(`${mass.id}:__substitute__`);
+    return [mass.id, { mass, substituteIds: substituteId ? [substituteId] : [] }];
+  }));
+
+  const missingRoles = slots.filter(slot => !slotReader.get(slot.id));
+  if (missingRoles.length) {
+    throw new Error('No hay suficientes lectores disponibles para llenar todas las funciones y un suplente por misa');
+  }
+
+  const usedReaders = new Set(slotReader.values());
+  const additionalSubstitutes = shuffled(readers.filter(reader => !usedReaders.has(reader.id)));
+  for (const reader of additionalSubstitutes) {
+    const compatibleMasses = shuffled(masses.filter(mass =>
+      (reader.availability || []).includes(mass.id)))
+      .sort((a, b) =>
+        plans.get(a.id).substituteIds.length - plans.get(b.id).substituteIds.length);
+    if (!compatibleMasses.length) continue;
+    const selectedMass = compatibleMasses[0];
+    plans.get(selectedMass.id).substituteIds.push(reader.id);
+    usedReaders.add(reader.id);
   }
 
   const generated = [];
   for (const mass of masses) {
     const roles = rotationRoles(mass.roles);
-    const baseReaders = roles.map(role => slotReader.get(`${mass.id}:${role}`));
     for (const [dateIndex, date] of massOccurrences(mass, month).entries()) {
-      baseReaders.forEach((readerId, baseIndex) => {
+      roles.forEach((baseRole, baseIndex) => {
+        const readerId = slotReader.get(`${mass.id}:${baseRole}`);
         if (!readerId || !readerById.has(readerId)) return;
         generated.push({
           id: crypto.randomUUID(), massId: mass.id, readerId,
           role: roles[(baseIndex + dateIndex) % roles.length],
-          month, date, substituteIds: plans.get(mass.id).substituteIds,
+          month, date, substituteIds: [...plans.get(mass.id).substituteIds],
           confirmationStatus: 'pending', createdAt: new Date()
         });
       });
     }
   }
 
+  assertReadersBelongToSingleMass(generated);
   const mongoSession = client.startSession();
   try {
     await mongoSession.withTransaction(async () => {
@@ -348,7 +470,15 @@ async function api(req, res, url) {
       if (!mass || !assignment.date || `${assignment.date}T${mass.time}` <= costaRicaDateTime()) {
         throw new Error('Esta misa ya comenzó o finalizó; ya no se puede cambiar la confirmación');
       }
-      if (!reader || !await readerPasswordMatches(reader, input.password)) throw new Error('Contraseña incorrecta');
+      await ensurePasswordAttemptAllowed('confirmation', id);
+      if (!reader || !await readerPasswordMatches(reader, input.password)) {
+        await registerPasswordFailure('confirmation', id);
+        throw new Error('Contraseña incorrecta');
+      }
+      await clearPasswordFailures('confirmation', id);
+      if (reader.mustChangePassword) {
+        throw new Error('Debes cambiar la contraseña temporal antes de confirmar una asignación');
+      }
       if (input.action === 'confirm') {
         const updated = await database.collection('assignments').findOneAndUpdate(
           { id, readerId: reader.id, confirmationStatus: { $in: ['pending', null] } },
@@ -402,25 +532,100 @@ async function api(req, res, url) {
         });
       } finally { await mongoSession.endSession(); }
       return json(res, 200, publicDoc(updated));
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return passwordRouteError(res, error); }
   }
   if (resource === 'readers' && id && action === 'password' && req.method === 'POST') {
     try {
       const input = await body(req);
       const reader = await database.collection('readers').findOne({ id, active: true });
-      if (!reader || !await readerPasswordMatches(reader, input.currentPassword)) throw new Error('La contraseña actual es incorrecta');
+      await ensurePasswordAttemptAllowed('password-change', id);
+      if (!reader || !await readerPasswordMatches(reader, input.currentPassword)) {
+        await registerPasswordFailure('password-change', id);
+        throw new Error('La contraseña actual es incorrecta');
+      }
+      await clearPasswordFailures('password-change', id);
       const newPassword = String(input.newPassword || '');
       if (newPassword.length < 8 || newPassword.length > 72) throw new Error('La nueva contraseña debe tener entre 8 y 72 caracteres');
       if (newPassword !== String(input.confirmPassword || '')) throw new Error('Las contraseñas nuevas no coinciden');
       if (await readerPasswordMatches(reader, newPassword)) throw new Error('La nueva contraseña debe ser diferente de la actual');
       await database.collection('readers').updateOne(
         { id: reader.id },
-        { $set: { passwordHash: await readerPasswordHash(newPassword), passwordChangedAt: new Date() } }
+        {
+          $set: {
+            passwordHash: await readerPasswordHash(newPassword),
+            mustChangePassword: false,
+            passwordChangedAt: new Date()
+          }
+        }
       );
       return json(res, 200, { ok: true });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return passwordRouteError(res, error); }
+  }
+  if (resource === 'readers' && id && action === 'profile' && req.method === 'POST') {
+    try {
+      const input = await body(req);
+      const reader = await database.collection('readers').findOne({ id, active: true });
+      await ensurePasswordAttemptAllowed('profile-edit', id);
+      if (!reader || !await readerPasswordMatches(reader, input.password)) {
+        await registerPasswordFailure('profile-edit', id);
+        throw new Error('Contraseña incorrecta');
+      }
+      await clearPasswordFailures('profile-edit', id);
+      if (reader.mustChangePassword) throw new Error('Debes cambiar la contraseña temporal antes de editar tus datos');
+      if (!input.profile) return json(res, 200, publicDoc(reader));
+
+      const value = validateReader({ ...input.profile, active: true });
+      const updated = await database.collection('readers').findOneAndUpdate(
+        { id: reader.id, active: true },
+        { $set: {
+          name: value.name,
+          phone: value.phone,
+          notes: value.notes,
+          availability: value.availability,
+          substituteOnly: value.substituteOnly
+        } },
+        { returnDocument: 'after' }
+      );
+      const today = costaRicaDateTime().slice(0, 10);
+      const titularFilter = value.substituteOnly
+        ? { readerId: id, date: { $gte: today } }
+        : { readerId: id, date: { $gte: today }, massId: { $nin: value.availability } };
+      await Promise.all([
+        database.collection('assignments').deleteMany(titularFilter),
+        database.collection('assignments').updateMany(
+          { date: { $gte: today }, massId: { $nin: value.availability }, substituteIds: id },
+          { $pull: { substituteIds: id } }
+        )
+      ]);
+      return json(res, 200, publicDoc(updated));
+    } catch (error) { return passwordRouteError(res, error); }
   }
   if (req.method !== 'GET' && !requireAdmin(req, res)) return;
+  if (resource === 'readers' && id && action === 'reset-password' && req.method === 'POST') {
+    try {
+      const temporaryPassword = temporaryReaderPassword();
+      const updated = await database.collection('readers').findOneAndUpdate(
+        { id },
+        {
+          $set: {
+            passwordHash: await readerPasswordHash(temporaryPassword),
+            mustChangePassword: true,
+            passwordResetAt: new Date()
+          },
+          $unset: { passwordChangedAt: '' }
+        },
+        { returnDocument: 'after' }
+      );
+      if (!updated) return json(res, 404, { error: 'Lector no encontrado' });
+      await clearPasswordFailures('password-change', id);
+      return json(res, 200, {
+        reader: publicDoc(updated),
+        temporaryPassword
+      });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (resource === 'random-assignments' && req.method === 'POST') {
     try {
       const input = await body(req);
@@ -440,12 +645,12 @@ async function api(req, res, url) {
       ]);
       if (!reader) throw new Error('Lector inválido');
       const replacementMonth = cleanText(input.month, 7) || cleanText(input.date, 10).slice(0, 7);
-      const otherMass = await database.collection('assignments').findOne({
+      const otherUse = await database.collection('assignments').findOne({
         month: replacementMonth,
-        massId: { $ne: cleanText(input.massId, 80) },
+        ...(assignment ? { id: { $ne: assignment.id } } : {}),
         $or: [{ readerId: reader.id }, { substituteIds: reader.id }]
       });
-      if (otherMass) throw new Error('Este lector ya pertenece a otra misa durante este mes');
+      if (otherUse) throw new Error('Cada persona solo puede pertenecer a una misa durante el mes, como titular o suplente');
       const duplicate = await database.collection('assignments').findOne({
         massId: cleanText(input.massId, 80), date: cleanText(input.date, 10), readerId: reader.id,
         ...(id === 'new' ? {} : { id: { $ne: id } })
@@ -488,12 +693,18 @@ async function api(req, res, url) {
       const validReaders = requestedIds.length ? await database.collection('readers').find({
         id: { $in: requestedIds }, active: true
       }).toArray() : [];
-      const validIds = new Set(validReaders.map(reader => reader.id));
+      const validIds = new Set(validReaders
+        .filter(reader => (reader.availability || []).includes(massId))
+        .map(reader => reader.id));
       const substituteIds = requestedIds.filter(readerId => validIds.has(readerId) && !titularIds.has(readerId));
-      const usedInOtherMass = monthAssignments.some(item => item.massId !== massId &&
+      if (!substituteIds.length) throw new Error('Cada misa debe conservar al menos un suplente');
+      const usedInOtherMass = monthAssignments.some(item =>
+        item.massId !== massId &&
         (item.substituteIds || []).some(readerId => substituteIds.includes(readerId)));
-      if (usedInOtherMass) throw new Error('Un suplente solo puede pertenecer a una misa durante el mes');
-      await database.collection('assignments').updateMany({ massId, date }, { $set: { substituteIds } });
+      if (usedInOtherMass) {
+        throw new Error('Un suplente solo puede pertenecer a una misa durante el mes');
+      }
+      await database.collection('assignments').updateMany({ massId, month }, { $set: { substituteIds } });
       return json(res, 200, { substituteIds });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
@@ -510,32 +721,65 @@ async function api(req, res, url) {
       const value = resource === 'readers' ? validateReader(input) : resource === 'masses' ? validateMass(input) : await validateAssignment(input);
       if (resource === 'assignments') {
         value.confirmationStatus = 'pending';
-        await collection.updateMany({ month: value.month, substituteIds: value.readerId }, { $pull: { substituteIds: value.readerId } });
-        await collection.updateOne(
-          { massId: value.massId, role: value.role, month: value.month, date: value.date },
-          { $set: value, $setOnInsert: { id: crypto.randomUUID(), createdAt: new Date() } },
-          { upsert: true }
-        );
+        const mongoSession = client.startSession();
+        try {
+          await mongoSession.withTransaction(async () => {
+            await collection.deleteMany(
+              {
+                month: value.month,
+                readerId: value.readerId,
+                $or: [
+                  { massId: { $ne: value.massId } },
+                  { role: { $ne: value.role } }
+                ]
+              },
+              { session: mongoSession }
+            );
+            await collection.updateMany(
+              { month: value.month, substituteIds: value.readerId },
+              { $pull: { substituteIds: value.readerId } },
+              { session: mongoSession }
+            );
+            await collection.updateOne(
+              { massId: value.massId, role: value.role, month: value.month, date: value.date },
+              { $set: value, $setOnInsert: { id: crypto.randomUUID(), createdAt: new Date() } },
+              { upsert: true, session: mongoSession }
+            );
+          });
+        } finally {
+          await mongoSession.endSession();
+        }
         const values = await collection.find({}).toArray();
         return json(res, 201, values.map(publicDoc));
       }
+      let temporaryPassword;
+      if (resource === 'readers') temporaryPassword = temporaryReaderPassword();
       const document = { id: crypto.randomUUID(), ...value,
-        ...(resource === 'readers' ? { passwordHash: await readerPasswordHash(input.password || DEFAULT_READER_PASSWORD) } : {}),
+        ...(resource === 'readers' ? {
+          passwordHash: await readerPasswordHash(temporaryPassword),
+          mustChangePassword: true,
+          passwordResetAt: new Date()
+        } : {}),
         createdAt: new Date() };
       await collection.insertOne(document);
+      if (resource === 'readers') {
+        return json(res, 201, { reader: publicDoc(document), temporaryPassword });
+      }
       return json(res, 201, publicDoc(document));
     }
     if (req.method === 'PUT' && id) {
       const input = await body(req);
       const value = resource === 'readers' ? validateReader(input) : resource === 'masses' ? validateMass(input) : await validateAssignment(input);
-      if (resource === 'readers' && input.password) value.passwordHash = await readerPasswordHash(input.password);
       const result = await collection.findOneAndUpdate({ id }, { $set: value }, { returnDocument: 'after' });
       if (!result) return json(res, 404, { error: 'Registro no encontrado' });
       const today = costaRicaDateTime().slice(0, 10);
       if (resource === 'readers') {
         const allowedMassIds = value.active ? value.availability : [];
+        const titularFilter = value.active && !value.substituteOnly
+          ? { readerId: id, date: { $gte: today }, massId: { $nin: allowedMassIds } }
+          : { readerId: id, date: { $gte: today } };
         await Promise.all([
-          database.collection('assignments').deleteMany({ readerId: id, date: { $gte: today }, massId: { $nin: allowedMassIds } }),
+          database.collection('assignments').deleteMany(titularFilter),
           database.collection('assignments').updateMany({ date: { $gte: today }, massId: { $nin: allowedMassIds }, substituteIds: id }, { $pull: { substituteIds: id } })
         ]);
       }
@@ -596,18 +840,29 @@ const server = http.createServer((req, res) => {
 async function start() {
   if (!MONGODB_URI) throw new Error('Falta MONGODB_URI en el archivo .env');
   if (!ADMIN_PASSWORD) throw new Error('Falta ADMIN_PASSWORD en el archivo .env');
-  client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 10000 });
+  client = new MongoClient(mongoConnectionUri(), { serverSelectionTimeoutMS: 30000 });
   await client.connect();
   database = client.db(DB_NAME);
   await Promise.all([
     database.collection('readers').createIndex({ id: 1 }, { unique: true }),
     database.collection('masses').createIndex({ id: 1 }, { unique: true }),
     database.collection('assignments').createIndex({ id: 1 }, { unique: true }),
-    database.collection('assignments').createIndex({ massId: 1, role: 1, month: 1, date: 1 }, { unique: true })
+    database.collection('assignments').createIndex({ massId: 1, role: 1, month: 1, date: 1 }, { unique: true }),
+    database.collection('auth_rate_limits').createIndex({ action: 1, targetId: 1 }, { unique: true }),
+    database.collection('auth_rate_limits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   ]);
   server.listen(PORT, () => console.log(`Lectores conectado a MongoDB en http://localhost:${PORT}`));
 }
-if (require.main === module) start().catch(error => { console.error(`No se pudo iniciar: ${error.message}`); process.exitCode = 1; });
+if (require.main === module) start().catch(error => {
+  console.error(`No se pudo iniciar: ${error.message}`);
+  if (error.cause) console.error('Causa:', error.cause);
+  if (error.reason?.servers) {
+    for (const [host, status] of error.reason.servers) {
+      console.error(`${host}: ${status.error?.message || status.type}`);
+    }
+  }
+  process.exitCode = 1;
+});
 async function shutdown() { server.close(); if (client) await client.close(); }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

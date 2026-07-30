@@ -245,3 +245,279 @@ Esta sección conserva y amplía el contexto anterior con todo lo implementado y
 - Mantener un historial de reportes enviados.
 - Permitir configurar un enlace o mecanismo específico para el grupo de WhatsApp.
 - Generar contraseñas iniciales diferentes para cada lector u obligar el cambio en el primer uso.
+
+## Actualización del 29 de julio de 2026
+
+- Se intentó iniciar el servidor mediante `node server.js`.
+- El servidor no pudo iniciar porque Node.js no encontró la dependencia `dotenv`.
+- El error exacto fue `MODULE_NOT_FOUND: Cannot find module 'dotenv'`, originado en la primera línea de `server.js`.
+- La versión de Node.js utilizada en el intento fue `v24.18.0`.
+- No se instalaron dependencias ni se realizaron cambios en el código.
+- Posteriormente se autorizó instalar lo necesario y se ejecutó `npm.cmd install`.
+- Se instalaron 16 paquetes y `npm audit` indicó 0 vulnerabilidades conocidas.
+- PowerShell no permitió ejecutar el envoltorio `npm.ps1` por la política de ejecución, por lo que se utilizó `npm.cmd` sin modificar dicha política.
+- Después de instalar las dependencias, `dotenv` y el archivo `.env` cargaron correctamente.
+- El servidor todavía no logró iniciar porque la conexión a MongoDB Atlas falló primero con `read ECONNRESET` y luego con `Server selection timed out after 10000 ms`.
+- `server.js` espera completar la conexión con MongoDB antes de abrir el puerto 3000, por lo que la aplicación aún no responde en `http://localhost:3000`.
+- El próximo diagnóstico debe revisar la conectividad con Atlas, la lista de acceso de red/IP del clúster y la vigencia de `MONGODB_URI`.
+
+### Corrección de titulares y suplentes en la asignación aleatoria
+
+- Se reportó que una misma persona aparecía como suplente en varias misas después de usar **Asignar aleatoriamente**.
+- Se reforzó `randomAssignments` con un registro único de persona a misa que incluye tanto titulares como suplentes.
+- Una persona solo puede pertenecer a una misa durante el mes, independientemente de si participa como titular, suplente o en una combinación de ambos roles.
+- La misma persona puede aparecer en las distintas fechas de una misa semanal recurrente porque todas corresponden a la misma misa y horario configurados.
+- Antes de reemplazar la planificación mensual se ejecuta una validación final de todos los resultados generados. Si encuentra una persona asociada a dos identificadores de misa distintos, cancela la operación y no guarda una planificación inconsistente.
+- Cada documento generado recibe una copia independiente de la lista de suplentes de su misa.
+- `node --check server.js` finalizó correctamente.
+- `npm test` no pudo ejecutarse porque en esta copia no existe `test/server.test.js`, aunque `package.json` todavía apunta a ese archivo.
+
+### Regla definitiva de participación mensual
+
+- Se aclaró que cada fecha de una misa recurrente cuenta como una celebración diferente.
+- Cada persona puede participar una sola vez en toda la planificación del mes.
+- Esa única participación puede ser como titular o como suplente, pero nunca en ambas categorías.
+- Un titular no puede ocupar otra función, otra fecha ni ser suplente durante ese mes.
+- Un suplente no puede ser titular ni suplente de otra celebración durante ese mes.
+- La asignación aleatoria ahora crea los puestos por misa y fecha concreta, en vez de elegir titulares para una plantilla semanal y repetirlos en todas sus fechas.
+- Cada lector tiene capacidad máxima de un puesto titular mensual dentro del algoritmo.
+- Los lectores que no quedaron como titulares se distribuyen como suplentes, con un máximo de un suplente por celebración.
+- Si quedan menos lectores disponibles que celebraciones, algunas celebraciones quedan sin suplente; no se repite ninguna persona para llenar espacios.
+- La validación final impide titulares duplicados, personas usadas simultáneamente como titulares y suplentes, y suplentes asociados a más de una celebración.
+- Las rutas de asignación manual, reemplazo y edición de suplentes también aplican la exclusividad mensual.
+- La interfaz muestra un solo selector de suplente por celebración y oculta como candidatos a quienes ya participan en otra parte del mes.
+- El reporte mensual ahora busca suplentes mediante misa y fecha exactas; anteriormente podía mostrar el suplente de una fecha en otras fechas de la misma misa recurrente.
+- `node --check server.js` y `node --check private/js/common.js` finalizaron correctamente.
+
+### Corrección de la interpretación por misa y horario
+
+- La interpretación anterior de limitar a cada persona a una sola fecha del mes fue incorrecta y provocaba celebraciones con funciones vacías.
+- La unidad correcta de exclusividad es la misa u horario configurado, no cada fecha individual de una recurrencia semanal.
+- Una persona puede servir en las distintas fechas mensuales de la misma misa recurrente, pero no puede pertenecer a otra misa u horario.
+- Cada misa debe quedar completa con todas sus funciones configuradas, incluyendo Primera lectura, Segunda lectura, Salmo y Moniciones, además de exactamente un suplente.
+- El suplente se incorporó como un puesto obligatorio dentro del mismo emparejamiento que calcula los titulares.
+- El algoritmo busca simultáneamente una combinación completa para todas las funciones y un suplente de cada misa, evitando consumir lectores necesarios para suplencias.
+- Una persona solo puede pertenecer a una misa: si es titular no puede ser suplente, y si es suplente no puede ser titular ni suplente de otro horario.
+- El mismo suplente se aplica a todas las fechas de la misa recurrente correspondiente.
+- La edición manual de un suplente actualiza todas las fechas de esa misa durante el mes y mantiene un máximo de un suplente.
+- Antes de abrir la transacción se comprueba que estén cubiertas todas las funciones y todos los suplentes. Si la cantidad de lectores o sus disponibilidades no permiten una solución completa, se devuelve un error y se conserva intacta la planificación anterior.
+- `node --check server.js` y `node --check private/js/common.js` volvieron a finalizar correctamente después de esta corrección.
+
+### Distribución de varios suplentes
+
+- Se aclaró que un suplente por misa es el mínimo obligatorio, no el máximo.
+- El emparejamiento principal sigue garantizando todas las funciones titulares y al menos un suplente compatible para cada misa.
+- Después de cubrir ese mínimo, todos los lectores activos y disponibles que no sean titulares ni suplentes todavía se reparten como suplentes adicionales.
+- La distribución se equilibra por rondas: se favorecen primero las misas con menos suplentes, de modo que reciban un segundo antes de comenzar a acumular terceros o cuartos cuando la disponibilidad lo permita.
+- Una misa puede quedar con uno, dos, tres, cuatro o más suplentes según la cantidad de lectores restantes y sus horarios disponibles.
+- Cada persona continúa perteneciendo a una sola misa y no puede ser simultáneamente titular y suplente.
+- La interfaz volvió a permitir administrar listas de varios suplentes y agrega una fila vacía para incorporar el siguiente.
+- El reporte mensual volvió a mostrar todos los suplentes en su orden de llamada.
+- La edición manual exige conservar al menos un suplente y comprueba que cada suplente esté activo y disponible para esa misa.
+- `node --check server.js` y `node --check private/js/common.js` finalizaron correctamente.
+
+### Reautenticación obligatoria al entrar como administrador
+
+- Se reportó que cerrar una ventana y volver a abrir el modo administrador permitía continuar sin escribir nuevamente la contraseña.
+- La página de login ya no redirige automáticamente a `adminmode.html` cuando encuentra una sesión administrativa anterior.
+- Cada vez que se abre `login.html`, se elimina la verificación administrativa de la pestaña y se invalida la cookie anterior mediante `/api/auth/logout`.
+- Solo después de validar nuevamente la contraseña se crea la cookie administrativa y una marca de acceso dentro de `sessionStorage` para esa pestaña.
+- Las páginas administrativas comprueban primero la marca de la pestaña y después la validez criptográfica de la cookie antes de cargar datos.
+- Abrir una página administrativa en otra pestaña o ventana sin esa verificación redirige al formulario de contraseña.
+- La cookie administrativa dejó de incluir `Max-Age`, por lo que ahora es una cookie de sesión del navegador y no una cookie persistente en disco.
+- El token conserva su vencimiento interno como defensa adicional, pero ese vencimiento ya no permite omitir el formulario al volver a entrar.
+- Cerrar sesión también elimina explícitamente la marca administrativa de la pestaña.
+- `node --check server.js`, `node --check private/js/login.js` y `node --check private/js/common.js` finalizaron correctamente.
+
+### Auditoría de vulnerabilidades del 29 de julio de 2026
+
+Se realizó una revisión de solo lectura del servidor, cliente, autenticación, autorización, exposición de datos, archivos estáticos y dependencias. No se corrigió código durante esta auditoría.
+
+#### Hallazgos críticos o altos
+
+- `.env` existe y contiene la configuración privada, pero `.gitignore` no existe actualmente. Git muestra `.env` como archivo nuevo sin seguimiento, por lo que existe un riesgo alto de incluir credenciales accidentalmente en un commit.
+- Todos los lectores nuevos reciben por defecto la misma contraseña conocida `11111111`. Cualquier cuenta que todavía la conserve puede ser suplantada por alguien que conozca el identificador de su asignación.
+- Las rutas públicas de confirmación de asistencia y cambio de contraseña de lectores no tienen limitación de intentos. Un atacante puede realizar intentos repetidos de contraseña; bcrypt ralentiza el cambio de contraseña, pero la confirmación también acepta hashes heredados rápidos.
+- Los tokens administrativos son autocontenidos y válidos durante ocho horas. Cerrar sesión borra la cookie del navegador, pero no existe una lista de revocación en el servidor; una copia robada del token continúa siendo válida hasta vencer o hasta cambiar `ADMIN_PASSWORD`.
+
+#### Hallazgos medios
+
+- La API pública `GET /api/readers` oculta teléfono y hash, pero todavía expone nombres, notas, disponibilidad e incluso lectores inactivos.
+- La API pública `GET /api/assignments` devuelve documentos completos salvo `_id` y `passwordHash`. Esto puede exponer estados de confirmación, fechas de confirmación, historial de rechazos e identificadores originales, además de toda la planificación histórica.
+- La exigencia reciente de contraseña al volver a entrar incluye una marca en `sessionStorage`, pero esa marca es una defensa de interfaz. La autorización real de la API continúa dependiendo exclusivamente de la cookie administrativa.
+- El limitador del login administrativo vive en un `Map` en memoria: se pierde al reiniciar, no se comparte entre instancias y utiliza `req.socket.remoteAddress`. Detrás de un proxy puede agrupar a muchos usuarios bajo una sola dirección y permitir un bloqueo compartido.
+- No existen tokens CSRF ni validación de cabeceras `Origin`/`Referer`. `SameSite=Strict` reduce sustancialmente el riesgo, pero la defensa depende de la cookie y de una configuración correcta del navegador y del alojamiento.
+- El servidor no configura explícitamente `requestTimeout`, `headersTimeout`, `keepAliveTimeout`, límites de conexiones ni manejo de `clientError`. Un cliente lento o muchas conexiones pueden consumir recursos.
+- El límite JSON de 1 MB se comprueba después de concatenar cada fragmento recibido y no destruye inmediatamente la solicitud al excederlo. Reduce el riesgo, pero no es una defensa completa contra agotamiento de recursos.
+- El constructor `new URL()` y el análisis de cookies se ejecutan sin una protección global. Una cabecera `Host` o una cookie con codificación inválida podría provocar una excepción no controlada y potencialmente afectar el proceso.
+- El manejador HTTP invoca la función asíncrona `api()` sin esperarla ni adjuntar un `.catch()` global. Un error no capturado dentro de una ruta puede convertirse en un rechazo no manejado.
+- En producción, `Secure` y HSTS solo se activan si `NODE_ENV=production`. La aplicación no exige HTTPS por sí misma ni valida que el proxy haya recibido la solicitud mediante HTTPS.
+
+#### Hallazgos bajos y endurecimiento
+
+- `ADMIN_PASSWORD` sirve tanto para comprobar el login como para firmar tokens HMAC. Conviene separar el secreto de sesión de la credencial administrativa y almacenar la contraseña administrativa mediante un hash lento.
+- La CSP es buena, pero permite `style-src 'unsafe-inline'`. No habilita scripts inline, por lo que el riesgo XSS principal permanece reducido.
+- No hay registro persistente de intentos de login, accesos administrativos ni cambios sensibles, lo que dificulta detectar abuso o investigar incidentes.
+- Algunos atributos HTML construidos mediante plantillas usan identificadores sin escapar. Actualmente los identificadores normales son UUID generados por el servidor, por lo que el riesgo práctico es bajo mientras la base no contenga datos manipulados externamente.
+- Las notas de lectores se escapan antes de insertarse en HTML, lo cual mitiga XSS, pero su publicación sigue siendo un asunto de privacidad.
+- No existe actualmente `test/server.test.js`, aunque `package.json` lo referencia. Esto impide ejecutar la suite de regresión de seguridad descrita anteriormente.
+
+#### Controles favorables comprobados
+
+- Las operaciones administrativas `POST`, `PUT` y `DELETE` pasan por autorización en el servidor, salvo las rutas públicas intencionales de confirmación y cambio de contraseña.
+- Las contraseñas nuevas de lectores usan bcrypt con costo 12 y los hashes no se devuelven en la API.
+- La cookie administrativa usa `HttpOnly`, `SameSite=Strict`, `Path=/` y `Secure` cuando se configura producción.
+- Existen CSP, `nosniff`, protección contra marcos, política de referencia, política de permisos y HSTS condicional.
+- Los textos controlados por usuarios se escapan de forma consistente en las vistas principales.
+- La resolución de archivos estáticos comprueba que la ruta permanezca dentro de las carpetas permitidas.
+- Los valores usados en consultas se convierten a texto y se limitan, reduciendo el riesgo de inyección de operadores MongoDB.
+- `npm audit --omit=dev` reportó 0 vulnerabilidades conocidas: 0 críticas, altas, moderadas, bajas o informativas.
+
+#### Prioridad recomendada
+
+1. Restaurar `.gitignore`, excluir `.env` y rotar cualquier credencial que haya sido compartida o publicada.
+2. Eliminar la contraseña inicial común, generar credenciales únicas y obligar el cambio en el primer uso.
+3. Añadir limitación persistente de intentos a confirmaciones, cambios de contraseña y login administrativo.
+4. Reducir los campos y el historial expuestos por las API públicas.
+5. Implementar sesiones administrativas revocables, un secreto de sesión separado y auditoría de acciones.
+6. Endurecer el servidor HTTP frente a solicitudes lentas, entradas malformadas y errores asíncronos no controlados.
+7. Restaurar y ampliar las pruebas automatizadas de seguridad e integración.
+
+#### Aclaración sobre `.gitignore`
+
+- `.gitignore` indica a Git qué archivos o carpetas locales no debe incluir normalmente en commits.
+- En este proyecto debe excluir al menos `.env` y `node_modules/`.
+- Excluir `.env` evita publicar accidentalmente contraseñas, credenciales de MongoDB y otras variables privadas.
+- Excluir `node_modules/` evita guardar miles de archivos de dependencias que pueden reconstruirse con `npm install`.
+- `.gitignore` no cifra, elimina ni protege directamente los archivos; solo evita que Git empiece a rastrearlos cuando todavía no están versionados.
+
+#### Restauración de `.gitignore`
+
+- Se restauró `.gitignore` usando su contenido anterior almacenado en Git.
+- Actualmente excluye `node_modules/`, `data/*.tmp`, `.env` y `.DS_Store`.
+- `git check-ignore` confirmó que `.env` y `node_modules/` están siendo ignorados correctamente.
+- No se leyó, modificó ni eliminó `.env`, y todavía no se rotaron credenciales.
+
+### Contraseñas temporales únicas para lectores
+
+- Se eliminó el uso de `11111111` al crear lectores nuevos.
+- Cada lector nuevo recibe una contraseña temporal aleatoria de 12 caracteres generada mediante `crypto.randomInt`.
+- El alfabeto evita caracteres visualmente ambiguos y combina mayúsculas, minúsculas y números.
+- La contraseña temporal se almacena únicamente como hash bcrypt con costo 12.
+- El valor legible se devuelve y muestra al administrador una sola vez después de crear el lector; no puede consultarse posteriormente.
+- La ventana de credencial permite copiar la contraseña y advierte que debe entregarse de forma privada.
+- Los lectores creados o restablecidos quedan con `mustChangePassword: true`.
+- Un lector con contraseña temporal pendiente no puede confirmar ni rechazar una asignación hasta cambiarla.
+- Al cambiar correctamente la contraseña personal se establece `mustChangePassword: false` y se registra `passwordChangedAt`.
+- En las tarjetas administrativas aparece **Generar contraseña temporal** para restablecer individualmente lectores existentes.
+- El restablecimiento requiere sesión administrativa, invalida inmediatamente la contraseña anterior, genera una distinta y la muestra una sola vez.
+- Las tarjetas muestran **Cambio de contraseña pendiente** cuando corresponde.
+- Los campos `mustChangePassword`, `passwordChangedAt` y `passwordResetAt` se eliminan de la respuesta pública de lectores.
+- La edición común de un lector ya no acepta una contraseña enviada dentro del formulario; todos los restablecimientos administrativos pasan por la ruta protegida específica.
+- `11111111` continúa temporalmente en el servidor solo para comprobar hashes heredados durante la migración; ya no se asigna a cuentas nuevas.
+- No se cambiaron automáticamente las contraseñas de lectores existentes para evitar invalidarlas antes de poder entregar las credenciales. El administrador debe restablecerlas individualmente desde la interfaz.
+- `node --check server.js` y `node --check private/js/common.js` finalizaron correctamente.
+- No se realizó una prueba dinámica contra MongoDB porque la conexión con Atlas continúa sin estar disponible en este entorno.
+
+### Limitación de intentos sin utilizar IP
+
+- Se decidió no utilizar direcciones IP, `X-Forwarded-For` ni configuración de confianza en proxies para las confirmaciones y cambios de contraseña de lectores.
+- Cada asignación mantiene su propio contador de contraseñas incorrectas para confirmar o rechazar asistencia.
+- Cada lector mantiene otro contador independiente para cambiar su contraseña personal.
+- Después de 10 contraseñas incorrectas, el objetivo correspondiente queda bloqueado durante 10 minutos.
+- Durante el bloqueo la API responde con HTTP 429 y la cabecera `Retry-After` con los segundos restantes.
+- Una contraseña correcta elimina inmediatamente el contador correspondiente.
+- Cuando vence un bloqueo, el contador se reinicia antes de registrar un nuevo fallo.
+- Los contadores se almacenan en la colección `auth_rate_limits` de MongoDB y sobreviven reinicios o varias instancias del servidor.
+- Se agregó un índice único por `action + targetId` y un índice TTL para limpiar automáticamente registros antiguos.
+- Un restablecimiento administrativo de contraseña elimina cualquier bloqueo existente para cambiar la contraseña de ese lector.
+- Los errores de validación de la contraseña nueva no cuentan como fallos; solamente una contraseña actual incorrecta incrementa el contador.
+- Esta decisión permite que alguien que conozca un identificador provoque deliberadamente un bloqueo de 10 minutos al fallar 10 veces. Se aceptó este compromiso para evitar completamente el uso de IP.
+- El limitador preexistente del login administrativo continúa usando `req.socket.remoteAddress`; no fue modificado como parte de este cambio.
+- `node --check server.js` finalizó correctamente.
+- No se ejecutaron pruebas dinámicas contra MongoDB porque Atlas continúa inaccesible desde este entorno.
+
+#### Aclaración sobre `DNS_SERVERS`
+
+- `DNS_SERVERS` permite indicar servidores DNS personalizados separados por comas.
+- Al arrancar, `server.js` lee esa variable y llama a `dns.setServers(...)` cuando contiene valores.
+- Su uso principal en este proyecto es ayudar a resolver el registro SRV de una conexión `mongodb+srv://` de MongoDB Atlas.
+- Si la variable no existe o está vacía, Node.js utiliza la resolución DNS normal del sistema o del proveedor de alojamiento.
+- Un servidor DNS incorrecto, bloqueado o lento puede impedir resolver MongoDB Atlas y provocar que la aplicación no inicie.
+- En Render normalmente conviene probar primero el DNS proporcionado por la plataforma y conservar `DNS_SERVERS` únicamente si existe un problema real de resolución.
+
+#### Eliminación de `DNS_SERVERS`
+
+- Se eliminó la variable `DNS_SERVERS` de `.env` sin mostrar ni modificar las demás variables privadas.
+- Se retiraron de `server.js` la importación del módulo `dns`, la lectura de `DNS_SERVERS` y la llamada a `dns.setServers`.
+- La conexión `mongodb+srv://` utiliza ahora exclusivamente la resolución DNS normal del sistema en desarrollo y la proporcionada por Render en producción.
+- Se verificó que no quedan referencias a `DNS_SERVERS`, `dns.setServers` ni `require('dns')` en el servidor.
+- `node --check server.js` finalizó correctamente.
+
+#### Diagnóstico de `querySrv ECONNREFUSED`
+
+- Después de eliminar `DNS_SERVERS`, `node server.js` falla al resolver `_mongodb._tcp.cluster0.5uov4sm.mongodb.net`.
+- `Resolve-DnsName` de Windows resolvió correctamente el registro SRV y devolvió los tres nodos de MongoDB Atlas, por lo que el dominio y el clúster existen.
+- `dns.resolveSrv` de Node.js reprodujo exactamente `querySrv ECONNREFUSED`.
+- `dns.getServers()` de Node.js mostró únicamente `127.0.0.1`.
+- No hay un resolvedor DNS local aceptando las consultas de Node en `127.0.0.1`, por lo que la conexión DNS es rechazada antes de intentar conectar con MongoDB.
+- Una consulta directa mediante `nslookup` a `8.8.8.8` también agotó el tiempo, señal de que la red, VPN, antivirus, firewall o configuración local no permite actualmente esa consulta DNS directa.
+- Windows consigue resolver mediante su propia capa de resolución, caché o mecanismo de red, pero el controlador de MongoDB necesita una consulta SRV que pasa por el resolvedor DNS interno de Node.
+- Este es un problema del entorno DNS local, no de la contraseña de MongoDB ni de la existencia del clúster.
+- No se restauró `DNS_SERVERS` ni se modificó `.env` durante el diagnóstico.
+
+### Protocolo de continuidad acordado el 29 de julio de 2026
+
+- `continuar_proyecto.md` se usará como memoria persistente y fuente principal de contexto del proyecto.
+- A partir de esta sesión, cada tarea realizada debe dejar aquí un resumen de las decisiones, cambios, archivos afectados, verificaciones ejecutadas, resultados y pendientes relevantes.
+- No se registrarán contraseñas, cadenas de conexión, tokens ni otros secretos.
+- Se evitará guardar pasos triviales o transitorios que no ayuden a retomar el proyecto; el objetivo es conservar contexto técnico y funcional útil.
+- Antes de trabajar en solicitudes posteriores se tendrá en cuenta el contenido acumulado de este documento.
+
+### Cambio manual de lectores después de la asignación aleatoria
+
+- Las reglas de disponibilidad y exclusividad continúan aplicándose sin cambios al botón **Asignar aleatoriamente**.
+- En modo administrador, los selectores de titulares muestran ahora todos los lectores activos, aunque ya pertenezcan a otra misa o no tengan marcado el nuevo horario en su disponibilidad.
+- Esto permite atender excepciones posteriores, por ejemplo mover manualmente a un lector de la misa de las 4:00 p. m. a la de las 6:00 p. m.
+- Al seleccionar manualmente a un lector, el servidor elimina sus puestos de titular en otra misa durante ese mes y lo retira de cualquier lista de suplentes antes de guardarlo en el puesto nuevo.
+- Si el lector tenía otra función dentro de la misma misa, también se libera esa función; se conservan únicamente sus apariciones en la misma misa y la misma función.
+- La sustitución del lector y la limpieza de sus usos anteriores se ejecutan dentro de una transacción de MongoDB para evitar duplicidades o cambios parciales.
+- El lector reemplazado en el puesto de destino queda libre para ser colocado manualmente en el puesto que corresponda.
+- Los lectores inactivos no aparecen como opciones y no pueden asignarse.
+- `node --check server.js` y `node --check private/js/common.js` finalizaron correctamente.
+- No se realizó una prueba dinámica contra MongoDB porque la conectividad con Atlas continúa siendo una limitación conocida de este entorno.
+
+### Lectores configurados únicamente como suplentes
+
+- El formulario de lectores incluye ahora la casilla **Solo suplente**, además de **Lector activo**.
+- Un lector activo sin **Solo suplente** puede participar como titular o como suplente.
+- Un lector activo con **Solo suplente** puede participar únicamente en las listas de suplentes y no puede recibir una función titular.
+- Un lector inactivo no participa como titular ni como suplente, independientemente del valor conservado en **Solo suplente**.
+- La asignación aleatoria excluye a los lectores de solo suplencia de todas las funciones titulares, pero los considera para el suplente obligatorio y para las suplencias adicionales según su disponibilidad.
+- Los selectores manuales de funciones titulares ocultan a los lectores de solo suplencia; los selectores de suplentes sí los incluyen.
+- El servidor también rechaza cualquier intento de colocar como titular a un lector configurado únicamente como suplente.
+- Las tarjetas de lectores activos muestran la etiqueta **Solo suplente** cuando corresponde.
+- Al editar un lector y activar **Solo suplente**, se eliminan sus titularidades futuras. Sus suplencias compatibles pueden conservarse.
+- Al desactivar un lector se continúan eliminando tanto sus titularidades como sus suplencias futuras.
+- Los lectores existentes que no tengan todavía el nuevo campo `substituteOnly` se interpretan como lectores normales y pueden ser titulares o suplentes.
+- Se actualizaron `server.js`, `private/js/common.js` y los formularios compartidos de `public/index.html`, `public/lectores.html`, `public/misas.html`, `public/asignar.html` y `public/reporte.html`.
+- `node --check server.js` y `node --check private/js/common.js` finalizaron correctamente.
+- No se realizó una prueba dinámica contra MongoDB debido a la limitación de conectividad con Atlas ya documentada.
+
+### Edición personal de datos y resumen administrativo de lectores
+
+- Cada lector activo dispone ahora de la opción **Editar mis datos** en su tarjeta pública.
+- Para abrir la edición debe escribir correctamente su contraseña personal.
+- La contraseña se valida otra vez al guardar; no basta con haber abierto el formulario.
+- Después de autenticarse, el lector puede modificar su nombre, teléfono, notas, disponibilidad de misas y la casilla **Solo suplente**.
+- El lector no puede modificar por sí mismo su estado activo o inactivo. Este control continúa reservado al administrador.
+- Los lectores con contraseña temporal pendiente deben cambiarla antes de poder editar sus datos.
+- Los intentos incorrectos de acceso a la edición utilizan el limitador persistente de MongoDB, separado mediante la acción `profile-edit`.
+- Los datos privados, incluido el teléfono, solo se entregan desde la ruta de perfil después de validar la contraseña.
+- Cuando un lector elimina una misa de su disponibilidad, se limpian sus titularidades y suplencias futuras incompatibles.
+- Cuando un lector activa **Solo suplente**, se eliminan todas sus titularidades futuras; sus suplencias compatibles se conservan.
+- La vista administrativa de lectores muestra un resumen con tres cantidades: **Activos normales**, **Solo suplentes** e **Inactivos**.
+- Las operaciones administrativas existentes continúan funcionando sin cambios y el administrador conserva el control total.
+- Se agregaron la ruta protegida `POST /api/readers/:id/profile`, el flujo de autenticación y edición en `private/js/common.js`, y el resumen administrativo.
+- `node --check server.js` y `node --check private/js/common.js` finalizaron correctamente.
+- No se ejecutó una prueba dinámica con MongoDB por la limitación de conectividad con Atlas documentada anteriormente.
