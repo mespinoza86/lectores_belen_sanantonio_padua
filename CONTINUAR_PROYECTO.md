@@ -590,3 +590,71 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - La actualización de suplentes utiliza filtros por `month`, `massId` y `date`; ya no ejecuta actualizaciones generales por misa y mes.
 - `node --check server.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente después de la corrección.
 - No se ejecutó una prueba dinámica con MongoDB Atlas debido a la limitación de conectividad documentada.
+
+### Continuidad retomada el 30 de julio de 2026
+
+- Se cargó y revisó nuevamente `continuar_proyecto.md` como fuente principal de contexto antes de continuar el trabajo.
+- Se mantiene el protocolo acordado: cada tarea futura dejará en este archivo un resumen útil de decisiones, cambios, archivos afectados, verificaciones, resultados y pendientes.
+- No se guardarán contraseñas, tokens, cadenas de conexión ni otros secretos.
+- El último estado funcional considerado es la corrección de **Asignar no asignados** para conservar las listas y el orden de suplentes por celebración y fecha exacta.
+
+### Alcance por fecha para cambios manuales de titulares
+
+- En el modo administrador de `public/asignar.html`, cada cambio manual de titular abre ahora un diálogo para escoger entre **Solo esta celebración** y **Esta y las restantes**.
+- El diálogo también se puede cerrar sin ejecutar el cambio; en ese caso el selector recupera su valor anterior.
+- Al seleccionar **Sin asignar** para las fechas restantes, se elimina únicamente a la persona retirada de la misma misa y de las fechas iguales o posteriores a la seleccionada, aunque esa persona cambie de función entre celebraciones.
+- La eliminación no vacía indiscriminadamente una función: los titulares diferentes que aparezcan en fechas posteriores permanecen intactos.
+- Al seleccionar una persona para las fechas restantes, se actualiza la celebración elegida y esa persona se agrega a un puesto vacío de cada celebración posterior de la misma misa, respetando la función que se encuentre libre.
+- Las funciones posteriores que ya tengan otro titular no se reemplazan.
+- Las fechas anteriores nunca se modifican por esta propagación.
+- La operación se implementó mediante la ruta administrativa `POST /api/assignment-change` y se ejecuta dentro de una transacción de MongoDB.
+- Se mantiene el comportamiento previo de los cambios manuales respecto a la exclusividad: el lector seleccionado se retira de usos incompatibles en otras misas o funciones del mes y de las listas de suplentes antes de asignarlo.
+- El servidor valida que la misa esté activa, que la función y la fecha correspondan a esa misa, que el lector esté activo y que no sea un lector configurado únicamente como suplente.
+- También se agregó una comprobación de concurrencia: si el titular cambió después de mostrarse la pantalla, la operación se rechaza y la interfaz vuelve a cargar los datos actuales.
+- Se actualizaron `server.js`, `private/js/common.js`, `private/styles.css` y `public/asignar.html`.
+- `node --check server.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- `npm test` no pudo ejecutarse porque continúa faltando `test/server.test.js`, aunque `package.json` todavía apunta a ese archivo.
+- No se realizó una prueba dinámica contra MongoDB Atlas debido a la limitación de conectividad documentada.
+
+#### Corrección de propagación sobre puestos sin asignar
+
+- Se detectó que **Esta y las restantes** actualizaba la fecha seleccionada, pero podía omitir fechas posteriores mostradas como **Sin asignar**.
+- La causa era que algunas fechas conservan un documento de asignación con `readerId: null`. El servidor interpretaba la mera existencia del documento como si el puesto ya tuviera titular.
+- Se corrigió `changeManualAssignment` para considerar ocupado un puesto posterior únicamente cuando su documento contiene realmente un `readerId`.
+- Los documentos existentes con titular continúan protegidos y no se reemplazan.
+- Los documentos con `readerId: null`, igual que las fechas sin documento, ahora reciben correctamente a la persona seleccionada cuando se elige **Esta y las restantes**.
+- La lógica para retirar únicamente a la persona elegida en fechas posteriores no necesitó cambios.
+- `node --check server.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- La comprobación dinámica con MongoDB Atlas continúa pendiente por la limitación de conectividad del entorno.
+
+#### Verificación de la instancia utilizada para probar
+
+- Al reportarse que el problema continuaba, se comprobó que no existe actualmente una aplicación respondiendo en `http://localhost:3000`.
+- La rama local y `origin/main` apuntan al commit `11dbd86`, pero la corrección más reciente de `readerId: null` todavía forma parte de cambios locales sin commit.
+- Por tanto, una prueba realizada en Render o en cualquier instancia basada en GitHub todavía ejecuta el código anterior y no puede incluir esa corrección.
+- Para comprobar el arreglo en Render será necesario confirmar los cambios, enviarlos a GitHub y esperar el despliegue del nuevo commit.
+- No se realizó un commit, `push` ni despliegue automáticamente porque esas acciones externas requieren confirmación del usuario.
+
+#### Corrección definitiva del alcance por persona
+
+- Se confirmó directamente que la aplicación estaba disponible en `http://localhost:3000` y que servía la interfaz y el JavaScript nuevos.
+- Los datos reales de agosto muestran que los lectores rotan entre Primera lectura, Segunda lectura, Salmo y Moniciones en las distintas fechas de una misma misa.
+- La implementación anterior filtraba las fechas restantes mediante `massId + role + readerId`; por eso solo encontraba nuevamente a la persona cuando repetía exactamente la misma función.
+- La eliminación para **Esta y las restantes** ahora busca mediante `massId + readerId` desde la fecha seleccionada, sin limitarse a una función.
+- Al asignar para las fechas restantes, el servidor busca un puesto realmente vacío en cada celebración posterior y conserva todos los puestos que ya pertenecen a otras personas.
+- Solo se cubre un puesto por celebración para no asignar dos funciones a la misma persona en una misma fecha.
+- El texto del diálogo fue actualizado para explicar que el alcance sigue a la persona aunque cambie de función.
+- Se reinició exclusivamente el proceso de Node que escuchaba el puerto 3000. La aplicación volvió a responder con HTTP 200 y quedó ejecutándose con el proceso nuevo.
+
+#### Propagación de un reemplazo directo
+
+- Se detectó una diferencia entre quitar primero al titular y reemplazarlo directamente mediante el selector.
+- Cuando se elegía directamente otra persona y luego **Esta y las restantes**, las fechas posteriores todavía contenían al titular anterior; como el servidor buscaba únicamente puestos vacíos, no propagaba el reemplazo.
+- El servidor ahora conserva el identificador del titular anterior y busca sus apariciones posteriores dentro de la misma misa, aunque cambie de función entre fechas.
+- En cada aparición futura encontrada, la persona nueva sustituye únicamente a la persona anterior. Los puestos pertenecientes a otros lectores no se modifican.
+- Si el puesto inicial estaba vacío, se mantiene la regla anterior de colocar a la persona seleccionada en un puesto vacío de cada celebración posterior.
+- Para evitar dos funciones en una misma celebración, los puestos futuros incompatibles que ya pertenecían a la persona nueva se liberan desde la fecha seleccionada antes de propagar el reemplazo.
+- Los puestos de esa persona en fechas anteriores de la misma misa ya no se eliminan al aplicar el alcance restante.
+- El texto del diálogo distingue ahora entre una asignación sobre un puesto vacío y un reemplazo directo de una persona por otra.
+- `node --check server.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- Se reinició el proceso de Node de `localhost:3000`; la aplicación volvió a responder con HTTP 200 mediante el proceso nuevo.

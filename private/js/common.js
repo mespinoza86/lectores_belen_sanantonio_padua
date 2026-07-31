@@ -129,7 +129,7 @@ function renderAssignments() {
       const reserveContent=isAdmin
         ? Array.from({length:Math.max(1,reserves.length+1)},(_,index)=>`<label><span>${index+1}.</span><select class="substitute-select" data-slot="${index}"><option value="">— Sin suplente —</option>${substituteOptions.map(reader=>`<option value="${reader.id}" ${reserves[index]===reader.id?'selected':''}>${esc(reader.name)}</option>`).join('')}</select></label>`).join('')
         : reserves.length?`<ol>${reserves.map(id=>`<li>${esc(readerName(id))}</li>`).join('')}</ol>`:'<span class="empty">Sin suplentes asignados.</span>';
-      const roles=m.roles.map(role => { const a=assignment(m.id,role,date); return `<div class="role-row"><label>${esc(role)}</label><select class="assign-select" data-mass="${m.id}" data-role="${esc(role)}" data-date="${date}"><option value="">— Sin asignar —</option>${titularReaders.map(r=>`<option value="${r.id}" ${a?.readerId===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}</select></div>`; }).join('');
+      const roles=m.roles.map(role => { const a=assignment(m.id,role,date); return `<div class="role-row"><label>${esc(role)}</label><select class="assign-select" data-mass="${m.id}" data-role="${esc(role)}" data-date="${date}" data-reader="${a?.readerId||''}"><option value="">— Sin asignar —</option>${titularReaders.map(r=>`<option value="${r.id}" ${a?.readerId===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}</select></div>`; }).join('');
       return `<section class="assignment-date"><h4>${esc(formatDate(date))}</h4>${roles}<div class="date-reserves" data-mass="${m.id}" data-date="${date}"><div><b>Suplentes de esta misa</b><small>En orden de llamada</small></div><div class="substitute-controls">${reserveContent}</div></div></section>`;
     }).join('');
     return `<article class="mass-assign"><div class="mass-assign-head"><div><h3>${esc(m.name)}</h3><small>${esc(massSchedule(m))} · ${dates.length} fecha(s) en ${monthLabel(state.month)}</small></div><span class="badge">${m.roles.length} funciones por misa</span></div>${datePlans}</article>`;
@@ -241,7 +241,40 @@ function eucharistReportText(){const form=$('#eucharistReportForm');if(!form.rep
 $('#copyEucharistReport').addEventListener('click',async()=>{const text=eucharistReportText();if(!text)return;try{await navigator.clipboard.writeText(text)}catch{const area=document.createElement('textarea');area.value=text;document.body.append(area);area.select();document.execCommand('copy');area.remove()}toast('Reporte copiado; ya puedes pegarlo en WhatsApp')});
 $('#shareEucharistReport').addEventListener('click',()=>{const text=eucharistReportText();if(!text)return;window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,'_blank','noopener,noreferrer')});
 $('#massForm').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget,x=f.elements,id=x.id.value,payload={name:x.name.value,time:x.time.value,type:x.type.value,weekday:+x.weekday.value,date:x.date.value,roles:x.roles.value.split(',').map(v=>v.trim()).filter(Boolean),active:x.active.checked};try{await request(`/api/masses${id?'/'+id:''}`,{method:id?'PUT':'POST',body:JSON.stringify(payload)});f.closest('dialog').close();toast('Misa guardada');await load()}catch(x){toast(x.message,true)}});
-$('#assignmentBoard').addEventListener('change',async e=>{if(!e.target.matches('.assign-select'))return;const {mass,role,date}=e.target.dataset;try{if(e.target.value){await request('/api/assignments',{method:'POST',body:JSON.stringify({massId:mass,role,readerId:e.target.value,month:state.month,date})})}else{const a=assignment(mass,role,date);if(a)await request(`/api/assignments/${a.id}`,{method:'DELETE'})}toast('Asignación actualizada');await load()}catch(x){toast(x.message,true)}});
+function chooseAssignmentScope(select){
+  const dialog=$('#assignmentScopeDialog');
+  if(!dialog)return Promise.resolve('single');
+  const previousName=readerName(select.dataset.reader),nextName=readerName(select.value);
+  $('#assignmentScopeCopy').textContent=select.value
+    ? select.dataset.reader
+      ? `Reemplazarás a ${previousName} por ${nextName}. Si eliges las fechas restantes, el reemplazo seguirá las apariciones posteriores de ${previousName} en esta misa.`
+      : `Asignarás a ${nextName}. Si eliges las fechas restantes, también ocupará un puesto sin asignar en cada celebración posterior de esta misa.`
+    : `Quitarás a ${previousName}. Si eliges las fechas restantes, se eliminarán sus apariciones posteriores en esta misa, aunque cambie de función.`;
+  dialog.showModal();
+  return new Promise(resolve=>{
+    let settled=false;
+    const finish=scope=>{if(settled)return;settled=true;dialog.removeEventListener('close',cancel);if(dialog.open)dialog.close();resolve(scope)};
+    const cancel=()=>finish(null);
+    $('#singleAssignmentScope').onclick=()=>finish('single');
+    $('#remainingAssignmentScope').onclick=()=>finish('remaining');
+    $('#cancelAssignmentScope').onclick=cancel;
+    dialog.addEventListener('close',cancel,{once:true});
+  });
+}
+$('#assignmentBoard').addEventListener('change',async e=>{
+  if(!e.target.matches('.assign-select'))return;
+  const select=e.target,{mass,role,date,reader:previousReaderId}=select.dataset;
+  const scope=await chooseAssignmentScope(select);
+  if(!scope){select.value=previousReaderId;return}
+  try{
+    const result=await request('/api/assignment-change',{method:'POST',body:JSON.stringify({
+      massId:mass,role,date,month:state.month,readerId:select.value,previousReaderId,scope
+    })});
+    const detail=scope==='remaining'&&result.changed>1?` en ${result.changed} celebraciones`:'';
+    toast(`Asignación actualizada${detail}`);
+    await load();
+  }catch(x){toast(x.message,true);await load()}
+});
 $('#assignmentBoard').addEventListener('change',async e=>{if(!e.target.matches('.substitute-select'))return;const group=e.target.closest('.date-reserves'),substituteIds=[...group.querySelectorAll('.substitute-select')].map(select=>select.value).filter((id,index,all)=>id&&all.indexOf(id)===index);try{await request('/api/substitutes',{method:'POST',body:JSON.stringify({massId:group.dataset.mass,date:group.dataset.date,substituteIds})});toast('Lista de suplentes actualizada');await load()}catch(x){toast(x.message,true)}});
 $('#month').value=state.month;$('#month').addEventListener('change',e=>{state.month=e.target.value||state.month;render()});
 showView(initialView);

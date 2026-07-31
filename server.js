@@ -224,6 +224,138 @@ async function validateAssignment(input) {
   }
   return { massId, readerId, role, month, date, substituteIds };
 }
+
+async function changeManualAssignment(input) {
+  const massId = cleanText(input.massId, 80);
+  const role = cleanText(input.role, 60);
+  const month = /^\d{4}-\d{2}$/.test(input.month || '') ? input.month : '';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(input.date || '') ? input.date : '';
+  const readerId = cleanText(input.readerId, 80);
+  const previousReaderId = cleanText(input.previousReaderId, 80);
+  const scope = input.scope === 'remaining' ? 'remaining' : input.scope === 'single' ? 'single' : '';
+  if (!massId || !role || !month || !date || !scope || !date.startsWith(`${month}-`)) {
+    throw new Error('Cambio de asignación inválido');
+  }
+
+  const mass = await database.collection('masses').findOne({ id: massId, active: true });
+  if (!mass || !mass.roles.includes(role) || !massOccurrences(mass, month).includes(date)) {
+    throw new Error('La misa, fecha o función ya no está disponible');
+  }
+  let reader = null;
+  if (readerId) {
+    reader = await database.collection('readers').findOne({ id: readerId, active: true });
+    if (!reader || reader.substituteOnly) {
+      throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : 'Lector inválido');
+    }
+  }
+
+  const collection = database.collection('assignments');
+  const mongoSession = client.startSession();
+  let changed = 0;
+  try {
+    await mongoSession.withTransaction(async () => {
+      const currentFilter = { massId, role, month, date };
+      const current = await collection.findOne(currentFilter, { session: mongoSession });
+      if ((current?.readerId || '') !== previousReaderId) {
+        throw new Error('La asignación cambió mientras estaba abierta. Inténtalo nuevamente');
+      }
+
+      if (!readerId) {
+        if (!current) return;
+        const removalFilter = scope === 'remaining'
+          ? { massId, month, readerId: current.readerId, date: { $gte: date } }
+          : currentFilter;
+        const result = await collection.deleteMany(removalFilter, { session: mongoSession });
+        changed = result.deletedCount;
+        return;
+      }
+
+      await collection.deleteMany(
+        { month, readerId, massId: { $ne: massId } },
+        { session: mongoSession }
+      );
+      await collection.deleteMany(
+        {
+          month,
+          massId,
+          readerId,
+          date: scope === 'remaining' ? { $gte: date } : date,
+          ...(scope === 'single' ? { role: { $ne: role } } : {})
+        },
+        { session: mongoSession }
+      );
+      await collection.updateMany(
+        { month, substituteIds: readerId },
+        { $pull: { substituteIds: readerId } },
+        { session: mongoSession }
+      );
+
+      const dates = scope === 'remaining'
+        ? massOccurrences(mass, month).filter(value => value >= date)
+        : [date];
+      for (const targetDate of dates) {
+        let targetRole = role;
+        let existing = await collection.findOne(
+          { massId, role: targetRole, month, date: targetDate },
+          { session: mongoSession }
+        );
+        if (targetDate !== date) {
+          targetRole = '';
+          if (previousReaderId) {
+            const previousAssignment = await collection.findOne(
+              { massId, month, date: targetDate, readerId: previousReaderId },
+              { session: mongoSession }
+            );
+            if (previousAssignment) {
+              targetRole = previousAssignment.role;
+              existing = previousAssignment;
+            }
+          }
+          if (!targetRole) {
+            for (const candidateRole of mass.roles) {
+              const candidate = await collection.findOne(
+                { massId, role: candidateRole, month, date: targetDate },
+                { session: mongoSession }
+              );
+              if (!candidate?.readerId) {
+                targetRole = candidateRole;
+                existing = candidate;
+                break;
+              }
+            }
+          }
+          if (!targetRole) continue;
+        }
+        const celebration = await collection.findOne(
+          { massId, month, date: targetDate, substituteIds: { $exists: true } },
+          { session: mongoSession }
+        );
+        const value = {
+          massId,
+          role: targetRole,
+          month,
+          date: targetDate,
+          readerId,
+          substituteIds: celebration?.substituteIds || [],
+          confirmationStatus: 'pending'
+        };
+        await collection.updateOne(
+          { massId, role: targetRole, month, date: targetDate },
+          {
+            $set: value,
+            $unset: { confirmedAt: '', originalReaderId: '', replacementLog: '' },
+            $setOnInsert: { id: crypto.randomUUID(), createdAt: new Date() }
+          },
+          { upsert: true, session: mongoSession }
+        );
+        changed += 1;
+      }
+    });
+  } finally {
+    await mongoSession.endSession();
+  }
+  return { changed, scope };
+}
 function publicDoc(document, hidePrivateReaderData = false) {
   if (!document) return document;
   const { _id, passwordHash, ...value } = document;
@@ -836,6 +968,15 @@ async function api(req, res, url) {
     } catch (error) {
       console.error('Error al asignar puestos pendientes:', error.message);
       return json(res, 400, { error: error.message });
+    }
+  }
+  if (resource === 'assignment-change' && req.method === 'POST') {
+    try {
+      const input = await body(req);
+      return json(res, 200, await changeManualAssignment(input));
+    } catch (error) {
+      console.error('Error cambiando asignación manual:', error.message);
+      return json(res, 400, { error: error.code === 11000 ? 'Ya existe una asignación para esa función' : error.message });
     }
   }
   if (resource === 'replacement' && id && req.method === 'POST') {
