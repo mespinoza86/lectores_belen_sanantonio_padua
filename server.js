@@ -275,14 +275,17 @@ function assertReadersBelongToSingleMass(assignments) {
   for (const assignment of assignments) {
     if (assignment.readerId) {
       const titularMass = titularMassByReader.get(assignment.readerId);
-      if ((titularMass && titularMass !== assignment.massId) || substituteMassByReader.has(assignment.readerId)) {
-        throw new Error('La planificación intentó usar un titular en otra misa o también como suplente');
+      const substituteMass = substituteMassByReader.get(assignment.readerId);
+      if ((titularMass && titularMass !== assignment.massId) ||
+          (substituteMass && substituteMass !== assignment.massId)) {
+        throw new Error('La planificación intentó usar un titular en otra misa');
       }
       titularMassByReader.set(assignment.readerId, assignment.massId);
     }
     for (const readerId of assignment.substituteIds || []) {
-      if (titularMassByReader.has(readerId)) {
-        throw new Error('La planificación intentó usar a un titular también como suplente');
+      const titularMass = titularMassByReader.get(readerId);
+      if (titularMass && titularMass !== assignment.massId) {
+        throw new Error('La planificación intentó usar a un titular como suplente de otra misa');
       }
       const assignedMass = substituteMassByReader.get(readerId);
       if (assignedMass && assignedMass !== assignment.massId) {
@@ -426,6 +429,197 @@ async function randomAssignments(month) {
     });
   } finally { await mongoSession.endSession(); }
   return generated.map(publicDoc);
+}
+
+async function fillUnassigned(month) {
+  if (!/^\d{4}-\d{2}$/.test(month || '')) throw new Error('Mes inválido');
+  const mongoSession = client.startSession();
+  let summary;
+  try {
+    await mongoSession.withTransaction(async () => {
+      const [masses, readers, existingAssignments] = await Promise.all([
+        database.collection('masses').find({ active: true }, { session: mongoSession }).sort({ weekday: 1, time: 1 }).toArray(),
+        database.collection('readers').find({ active: true }, { session: mongoSession }).toArray(),
+        database.collection('assignments').find({ month }, { session: mongoSession }).toArray()
+      ]);
+      const titularMassByReader = new Map();
+      const celebrationSubstitutes = new Map();
+      const substituteCelebrationsByReader = new Map();
+      const celebrationKey = (massId, date) => `${massId}:${date}`;
+
+      for (const assignment of existingAssignments) {
+        if (assignment.readerId) titularMassByReader.set(assignment.readerId, assignment.massId);
+        const key = celebrationKey(assignment.massId, assignment.date);
+        if (!celebrationSubstitutes.has(key)) {
+          celebrationSubstitutes.set(key, {
+            massId: assignment.massId,
+            date: assignment.date,
+            ids: [...(assignment.substituteIds || [])]
+          });
+        }
+      }
+      for (const [key, celebration] of celebrationSubstitutes) {
+        for (const readerId of celebration.ids) {
+          if (!substituteCelebrationsByReader.has(readerId)) {
+            substituteCelebrationsByReader.set(readerId, new Set());
+          }
+          substituteCelebrationsByReader.get(readerId).add(key);
+        }
+      }
+
+      const occupiedSlots = new Set(existingAssignments.map(item => `${item.massId}:${item.date}:${item.role}`));
+      const generated = [];
+      const touchedCelebrations = new Set();
+      let movedSubstitutes = 0;
+      let replacedSubstitutes = 0;
+
+      const readerUsedOnDate = (readerId, massId, date) =>
+        [...existingAssignments, ...generated].some(item =>
+          item.readerId === readerId && item.massId === massId && item.date === date);
+      const canBeTitular = (reader, mass, date) =>
+        reader?.active && !reader.substituteOnly &&
+        (reader.availability || []).includes(mass.id) &&
+        !readerUsedOnDate(reader.id, mass.id, date);
+      const substituteCelebrations = readerId =>
+        [...(substituteCelebrationsByReader.get(readerId) || [])]
+          .map(key => celebrationSubstitutes.get(key))
+          .filter(Boolean);
+      const belongsOnlyToMassAsSubstitute = (readerId, massId) => {
+        const celebrations = substituteCelebrations(readerId);
+        return celebrations.length > 0 && celebrations.every(item => item.massId === massId);
+      };
+      const unownedReaders = () => readers.filter(reader =>
+        !titularMassByReader.has(reader.id) && !substituteCelebrationsByReader.has(reader.id));
+
+      function replaceMovedSubstitute(sourceCelebration, removedIndex, movedReaderId) {
+        const replacement = shuffled(unownedReaders()).find(reader =>
+          reader.id !== movedReaderId &&
+          (reader.availability || []).includes(sourceCelebration.massId));
+        if (!replacement) return;
+        sourceCelebration.ids.splice(removedIndex, 0, replacement.id);
+        substituteCelebrationsByReader.set(
+          replacement.id,
+          new Set([celebrationKey(sourceCelebration.massId, sourceCelebration.date)])
+        );
+        replacedSubstitutes += 1;
+      }
+
+      const missingSlots = masses.flatMap(mass =>
+        massOccurrences(mass, month).flatMap(date =>
+          rotationRoles(mass.roles)
+            .filter(role => !occupiedSlots.has(`${mass.id}:${date}:${role}`))
+            .map(role => ({ mass, date, role }))));
+
+      for (const { mass, date, role } of missingSlots) {
+        const candidates = shuffled(readers);
+        const targetKey = celebrationKey(mass.id, date);
+        const targetCelebration = celebrationSubstitutes.get(targetKey) || {
+          massId: mass.id, date, ids: []
+        };
+        if (!celebrationSubstitutes.has(targetKey)) {
+          celebrationSubstitutes.set(targetKey, targetCelebration);
+        }
+        let reader = candidates.find(candidate =>
+          targetCelebration.ids.includes(candidate.id) &&
+          belongsOnlyToMassAsSubstitute(candidate.id, mass.id) &&
+          canBeTitular(candidate, mass, date));
+
+        if (!reader) {
+          reader = candidates.find(candidate =>
+            !titularMassByReader.has(candidate.id) &&
+            !substituteCelebrationsByReader.has(candidate.id) &&
+            canBeTitular(candidate, mass, date));
+        }
+
+        if (!reader) {
+          reader = candidates.find(candidate => {
+            const celebrations = substituteCelebrations(candidate.id);
+            return !titularMassByReader.has(candidate.id) &&
+              celebrations.length === 1 &&
+              celebrations[0].massId !== mass.id &&
+              canBeTitular(candidate, mass, date);
+          });
+        }
+
+        if (!reader) {
+          reader = candidates.find(candidate =>
+            titularMassByReader.get(candidate.id) === mass.id &&
+            (!substituteCelebrationsByReader.has(candidate.id) ||
+              belongsOnlyToMassAsSubstitute(candidate.id, mass.id)) &&
+            canBeTitular(candidate, mass, date));
+        }
+        if (!reader) continue;
+
+        const sourceCelebrations = substituteCelebrations(reader.id);
+        const sourceCelebration = sourceCelebrations.find(item =>
+          item.massId !== mass.id || (item.massId === mass.id && item.date === date));
+        if (sourceCelebration) {
+          const sourceKey = celebrationKey(sourceCelebration.massId, sourceCelebration.date);
+          const removedIndex = sourceCelebration.ids.indexOf(reader.id);
+          if (removedIndex >= 0) sourceCelebration.ids.splice(removedIndex, 1);
+          const readerCelebrations = substituteCelebrationsByReader.get(reader.id);
+          readerCelebrations?.delete(sourceKey);
+          if (!readerCelebrations?.size) substituteCelebrationsByReader.delete(reader.id);
+          touchedCelebrations.add(sourceKey);
+          if (sourceCelebration.massId !== mass.id) {
+            movedSubstitutes += 1;
+            replaceMovedSubstitute(sourceCelebration, removedIndex, reader.id);
+          }
+        }
+
+        titularMassByReader.set(reader.id, mass.id);
+        generated.push({
+          id: crypto.randomUUID(),
+          massId: mass.id,
+          readerId: reader.id,
+          role,
+          month,
+          date,
+          substituteIds: [...targetCelebration.ids],
+          confirmationStatus: 'pending',
+          createdAt: new Date()
+        });
+        occupiedSlots.add(`${mass.id}:${date}:${role}`);
+      }
+
+      for (const assignment of generated) {
+        assignment.substituteIds = [
+          ...(celebrationSubstitutes.get(celebrationKey(assignment.massId, assignment.date))?.ids || [])
+        ];
+      }
+      const finalAssignments = [...existingAssignments, ...generated].map(assignment =>
+        touchedCelebrations.has(celebrationKey(assignment.massId, assignment.date))
+          ? {
+              ...assignment,
+              substituteIds: [
+                ...(celebrationSubstitutes.get(celebrationKey(assignment.massId, assignment.date))?.ids || [])
+              ]
+            }
+          : assignment);
+      assertReadersBelongToSingleMass(finalAssignments);
+
+      for (const key of touchedCelebrations) {
+        const celebration = celebrationSubstitutes.get(key);
+        await database.collection('assignments').updateMany(
+          { month, massId: celebration.massId, date: celebration.date },
+          { $set: { substituteIds: [...celebration.ids] } },
+          { session: mongoSession }
+        );
+      }
+      if (generated.length) {
+        await database.collection('assignments').insertMany(generated, { session: mongoSession });
+      }
+      summary = {
+        filled: generated.length,
+        remaining: missingSlots.length - generated.length,
+        movedSubstitutes,
+        replacedSubstitutes
+      };
+    });
+  } finally {
+    await mongoSession.endSession();
+  }
+  return summary;
 }
 
 async function api(req, res, url) {
@@ -632,6 +826,15 @@ async function api(req, res, url) {
       return json(res, 201, await randomAssignments(input.month));
     } catch (error) {
       console.error('Error de asignación aleatoria:', error.message);
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (resource === 'fill-unassigned' && req.method === 'POST') {
+    try {
+      const input = await body(req);
+      return json(res, 200, await fillUnassigned(input.month));
+    } catch (error) {
+      console.error('Error al asignar puestos pendientes:', error.message);
       return json(res, 400, { error: error.message });
     }
   }

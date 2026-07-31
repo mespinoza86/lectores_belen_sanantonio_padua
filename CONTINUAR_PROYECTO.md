@@ -521,3 +521,72 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - Se agregaron la ruta protegida `POST /api/readers/:id/profile`, el flujo de autenticación y edición en `private/js/common.js`, y el resumen administrativo.
 - `node --check server.js` y `node --check private/js/common.js` finalizaron correctamente.
 - No se ejecutó una prueba dinámica con MongoDB por la limitación de conectividad con Atlas documentada anteriormente.
+
+### Diagnóstico de diferencia entre localhost y Render del 30 de julio de 2026
+
+- En localhost aparece **Editar mis datos**, mientras que la versión publicada en Render solamente muestra **Cambiar contraseña**.
+- El repositorio local está en el commit `a191e2c` (`Adding latest changes`), donde sí existen el botón, el flujo del cliente y la ruta de perfil para editar los datos personales.
+- La rama local `main` está un commit por delante de `origin/main`: `git status -sb` mostró `main...origin/main [ahead 1]`.
+- GitHub y Render continúan en el commit anterior `31d389a6d0443b159f30b8d2977295f0a8fea07c`.
+- El commit `31d389a` no contiene los textos ni el flujo de **Editar mis datos** en `private/js/common.js`.
+- Por tanto, la diferencia no se debe al caché del navegador: el cambio existe únicamente en el commit local `a191e2c` y todavía no ha sido enviado a GitHub.
+- Para publicarlo será necesario subir el commit local a `origin/main` y verificar que Render complete un despliegue del nuevo SHA.
+- No se modificó el código de la aplicación ni se realizó el `push` durante este diagnóstico.
+
+### Cambio solicitado: asignar únicamente puestos vacíos
+
+- Se propuso agregar en `asignar.html`, visible en modo administrador, una acción **Asignar no asignados** junto a la asignación aleatoria existente.
+- Esta acción no debe reemplazar ni rehacer toda la planificación mensual; debe conservar las asignaciones existentes y buscar lectores solamente para las funciones titulares que estén vacías.
+- Debe mantenerse la regla de exclusividad por misa u horario: una persona que pertenece como titular o suplente a una misa no puede asignarse a otra misa distinta.
+- Para cubrir una función vacía se puede utilizar:
+  - Un lector activo, apto para titular y disponible en esa misa, que todavía no pertenezca a otra misa.
+  - Un lector que actualmente sea suplente de esa misma misa, retirándolo de la lista de suplentes al convertirlo en titular.
+- También se planteó permitir tomar un suplente de otra misa para cubrir el puesto, retirándolo primero de aquella misa; si es posible, se buscaría un suplente de reemplazo para la misa de origen y, si no existe, podría quedar con menos suplentes.
+- La definición se encuentra pendiente de confirmación antes de implementar, especialmente respecto a cuándo se permite dejar una misa sin suplente y si el traslado desde otra misa debe respetar la disponibilidad del lector en la misa de destino.
+
+### Implementación de Asignar no asignados
+
+- Se confirmó e implementó la acción **Asignar no asignados** en `public/asignar.html`, visible únicamente en modo administrador junto a **Asignar aleatoriamente**.
+- La nueva acción trabaja sobre el mes seleccionado, conserva todas las titularidades existentes y solamente intenta crear las funciones que estén vacías.
+- Se agregó la ruta administrativa `POST /api/fill-unassigned` y la función transaccional `fillUnassigned` en `server.js`.
+- Para cada puesto vacío se buscan candidatos en este orden:
+  - Un suplente apto de la misma misa.
+  - Un lector titular apto que todavía no pertenezca a ninguna misa.
+  - Un suplente apto perteneciente a otra misa.
+  - Un titular de la misma misa que no tenga otra función en esa fecha.
+- Todo titular elegido debe estar activo, no estar configurado como **Solo suplente**, tener la misa de destino en su disponibilidad y no ocupar otra función de esa misma celebración.
+- Cuando se promueve un suplente de la misma misa, se elimina de la lista de suplentes antes de convertirlo en titular.
+- Cuando se traslada un suplente de otra misa, se elimina de todas las listas de suplentes de su misa de origen durante el mes. El sistema intenta reemplazarlo con un lector activo, libre y disponible para el horario de origen; si no existe, la misa puede quedar con menos suplentes o sin suplentes.
+- Los lectores configurados como **Solo suplente** pueden utilizarse como reemplazo en una lista de suplentes, pero nunca para cubrir una función titular.
+- La operación completa se ejecuta dentro de una transacción de MongoDB. Antes de guardar se valida nuevamente que ninguna persona pertenezca a dos misas ni figure simultáneamente como titular y suplente.
+- La respuesta indica cuántos puestos se completaron, cuántos quedaron vacíos, cuántos suplentes se trasladaron y cuántos pudieron ser reemplazados.
+- Se agregó una confirmación en la interfaz y un mensaje final que informa si quedaron puestos sin un lector compatible.
+- Se añadió un contenedor adaptable específico para los dos botones de asignación en `private/styles.css`.
+- `node --check server.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- `npm test` no pudo ejecutarse porque `package.json` todavía apunta a `test/server.test.js`, archivo que no existe en esta copia del proyecto.
+- No se realizó una prueba dinámica contra MongoDB Atlas debido a la limitación de conectividad ya documentada.
+
+### Corrección solicitada para conservar el orden de suplentes
+
+- Se detectó que **Asignar no asignados** agrupa las listas de suplentes por misa y las vuelve a escribir en todas las fechas del mes cuando promueve o traslada a uno de ellos.
+- Este comportamiento descuadra y reordena suplentes de celebraciones posteriores que no participaron en la operación.
+- La regla deseada es trabajar con la lista de suplentes de cada celebración o fecha concreta, sin normalizarla ni copiarla a las demás fechas de la misma misa.
+- Si se promueve a titular un suplente de una celebración, únicamente debe retirarse ese identificador de la lista de esa celebración; todos los demás suplentes deben conservar exactamente su orden.
+- Si se toma un suplente de otra misa y fecha, debe retirarse solamente de esa lista de origen. Los demás suplentes de esa lista permanecen en el mismo orden.
+- Si se encuentra un suplente de reemplazo, debe colocarse en la posición liberada o, como mínimo, sin reordenar a los suplentes existentes.
+- Las listas de suplentes de celebraciones que no fueron utilizadas deben permanecer idénticas.
+- La corrección se encuentra pendiente de confirmación antes de modificar el código.
+
+### Corrección implementada para suplentes por fecha
+
+- Se corrigió `fillUnassigned` para administrar suplentes mediante la combinación exacta `massId + date`, en lugar de agruparlos por misa durante todo el mes.
+- Las listas de suplentes que no participan en una promoción o traslado ya no se actualizan en MongoDB.
+- Al promover un suplente de la misma celebración se elimina únicamente su posición de esa fecha. Los demás identificadores conservan el mismo orden.
+- Si se traslada un suplente desde otra misa, se modifica únicamente su celebración de origen y el resto de esa lista mantiene su orden.
+- El suplente de reemplazo, cuando existe, se inserta en el mismo índice que ocupaba la persona trasladada.
+- Para mantener la exclusividad entre misas sin alterar fechas adicionales, un suplente de otra misa solo puede trasladarse automáticamente cuando aparece en una única celebración de origen. Si todavía figura como suplente en varias fechas de esa otra misa, no se utiliza para llenar el puesto.
+- Se ajustó la validación final para permitir que una persona sea titular y suplente en fechas distintas de la misma misa, pero continúa rechazando cualquier pertenencia simultánea a misas diferentes.
+- Los documentos nuevos reciben la lista final exacta de suplentes de su propia celebración.
+- La actualización de suplentes utiliza filtros por `month`, `massId` y `date`; ya no ejecuta actualizaciones generales por misa y mes.
+- `node --check server.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente después de la corrección.
+- No se ejecutó una prueba dinámica con MongoDB Atlas debido a la limitación de conectividad documentada.

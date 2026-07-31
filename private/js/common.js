@@ -207,13 +207,18 @@ document.addEventListener('click', async e => {
     await request('/api/auth/logout', { method: 'POST' });
     return location.replace('/');
   }
-  if (!isAdmin && e.target.closest('#newReader,#newMass,#randomAssign,.edit-reader,.edit-mass,.delete-reader,.delete-mass,.reset-reader-password')) return;
+  if (!isAdmin && e.target.closest('#newReader,#newMass,#randomAssign,#fillUnassigned,.edit-reader,.edit-mass,.delete-reader,.delete-mass,.reset-reader-password')) return;
   if(e.target.closest('#newReader')) openReader();
   if(e.target.closest('#newMass')) openMass();
   if(e.target.closest('#randomAssign')) {
     if(!confirm(`¿Reemplazar las asignaciones de ${monthLabel(state.month)} y generar titulares y suplentes según disponibilidad?`)) return;
     const button=e.target.closest('#randomAssign'),label=button.textContent;button.disabled=true;button.textContent='Generando…';
     try{await request('/api/random-assignments',{method:'POST',body:JSON.stringify({month:state.month})});toast('Titulares y suplentes generados');await load()}catch(x){toast(x.message,true)}finally{button.disabled=false;button.textContent=label}
+  }
+  if(e.target.closest('#fillUnassigned')) {
+    if(!confirm(`¿Completar únicamente las funciones sin asignar de ${monthLabel(state.month)}? Las asignaciones actuales se conservarán.`)) return;
+    const button=e.target.closest('#fillUnassigned'),label=button.textContent;button.disabled=true;button.textContent='Completando…';
+    try{const result=await request('/api/fill-unassigned',{method:'POST',body:JSON.stringify({month:state.month})});const detail=result.remaining?` Quedaron ${result.remaining} puestos sin lector disponible.`:'';toast(`Se completaron ${result.filled} puestos.${detail}`);await load()}catch(x){toast(x.message,true)}finally{button.disabled=false;button.textContent=label}
   }
   if(e.target.closest('.close')) e.target.closest('dialog').close();
   const er=e.target.closest('.edit-reader'); if(er) openReader(state.readers.find(x=>x.id===er.dataset.id));
