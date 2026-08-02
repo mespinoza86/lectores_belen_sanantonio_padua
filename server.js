@@ -186,17 +186,39 @@ function requireAdmin(req, res) {
 function validateReader(input) {
   const name = cleanText(input.name);
   if (!name) throw new Error('El nombre es obligatorio');
-  const availability = Array.isArray(input.availability)
-    ? [...new Set(input.availability.map(id => cleanText(id, 80)).filter(Boolean))]
+  const legacyAvailability = Array.isArray(input.availability)
+    ? [...new Set(input.availability.map(id => cleanText(id, 80)).filter(Boolean))] : [];
+  const hasPreferenceModel = Array.isArray(input.preferredMassIds) || Array.isArray(input.unavailableMassIds);
+  const preferredMassIds = Array.isArray(input.preferredMassIds)
+    ? [...new Set(input.preferredMassIds.map(id => cleanText(id, 80)).filter(Boolean))]
+    : legacyAvailability;
+  const unavailableMassIds = Array.isArray(input.unavailableMassIds)
+    ? [...new Set(input.unavailableMassIds.map(id => cleanText(id, 80)).filter(Boolean))]
     : [];
+  if (preferredMassIds.some(id => unavailableMassIds.includes(id))) {
+    throw new Error('Una misa no puede ser preferida y no disponible al mismo tiempo');
+  }
   return {
     name,
     phone: cleanText(input.phone, 40),
     notes: cleanText(input.notes, 300),
-    availability,
+    availability: preferredMassIds,
+    preferredMassIds,
+    unavailableMassIds,
+    preferenceModel: hasPreferenceModel ? 1 : 0,
     active: input.active !== false,
     substituteOnly: input.substituteOnly === true
   };
+}
+function readerPrefersMass(reader, massId) {
+  const preferred = Array.isArray(reader.preferredMassIds) ? reader.preferredMassIds : (reader.availability || []);
+  return preferred.includes(massId);
+}
+function readerCanServeMass(reader, massId) {
+  if (Array.isArray(reader.unavailableMassIds) || reader.preferenceModel === 1) {
+    return !(reader.unavailableMassIds || []).includes(massId);
+  }
+  return (reader.availability || []).includes(massId);
 }
 function validateMass(input) {
   const name = cleanText(input.name);
@@ -219,8 +241,8 @@ async function validateAssignment(input) {
     database.collection('masses').findOne({ id: massId }),
     database.collection('readers').findOne({ id: readerId })
   ]);
-  if (!mass || !reader?.active || reader.substituteOnly || !month || !mass.roles.includes(role)) {
-    throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : 'Asignación inválida');
+  if (!mass || !reader?.active || reader.substituteOnly || !readerCanServeMass(reader, massId) || !month || !mass.roles.includes(role)) {
+    throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : !readerCanServeMass(reader || {}, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Asignación inválida');
   }
   return { massId, readerId, role, month, date, substituteIds };
 }
@@ -244,8 +266,8 @@ async function changeManualAssignment(input) {
   let reader = null;
   if (readerId) {
     reader = await database.collection('readers').findOne({ id: readerId, active: true });
-    if (!reader || reader.substituteOnly) {
-      throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : 'Lector inválido');
+    if (!reader || reader.substituteOnly || !readerCanServeMass(reader, massId)) {
+      throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : reader && !readerCanServeMass(reader, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Lector inválido');
     }
   }
 
@@ -463,18 +485,19 @@ async function randomAssignments(month) {
   readers.forEach((reader, index) => addEdge(source, readerOffset + index, 1, 0));
   slots.forEach((slot, index) => addEdge(slotOffset + index, sink, 1, 0));
   readers.forEach((reader, readerIndex) => slots.forEach((slot, slotIndex) => {
-    if (!(reader.availability || []).includes(slot.mass.id)) return;
+    if (!readerCanServeMass(reader, slot.mass.id)) return;
     if (reader.substituteOnly && !slot.isSubstitute) return;
     const past = titleHistory.get(reader.id);
     const sameMassCount = past.filter(item => item.massId === slot.mass.id).length;
-    const cost = slot.isSubstitute
+    const preferenceCost = readerPrefersMass(reader, slot.mass.id) ? 0 : 10_000_000;
+    const cost = preferenceCost + (slot.isSubstitute
       ? (previousTitulars.has(reader.id) ? -100_000 : 0) +
         (previousSubstitutes.has(reader.id) ? 10_000 : 0) +
         past.length * 10 + Math.floor(Math.random() * 10)
       : (previousTitulars.has(reader.id) ? 1_000_000 : 0) +
         (previousSubstitutes.has(reader.id) ? -100_000 : 0) +
         (lastTitle.get(reader.id)?.massId === slot.mass.id ? 10_000 : 0) +
-        past.length * 100 + sameMassCount * 25 + Math.floor(Math.random() * 10);
+        past.length * 100 + sameMassCount * 25 + Math.floor(Math.random() * 10));
     addEdge(readerOffset + readerIndex, slotOffset + slotIndex, 1, cost, true);
   }));
 
@@ -525,9 +548,9 @@ async function randomAssignments(month) {
   const usedReaders = new Set(slotReader.values());
   const additionalSubstitutes = shuffled(readers.filter(reader => !usedReaders.has(reader.id)));
   for (const reader of additionalSubstitutes) {
-    const compatibleMasses = shuffled(masses.filter(mass =>
-      (reader.availability || []).includes(mass.id)))
+    const compatibleMasses = shuffled(masses.filter(mass => readerCanServeMass(reader, mass.id)))
       .sort((a, b) =>
+        Number(readerPrefersMass(reader, b.id)) - Number(readerPrefersMass(reader, a.id)) ||
         plans.get(a.id).substituteIds.length - plans.get(b.id).substituteIds.length);
     if (!compatibleMasses.length) continue;
     const selectedMass = compatibleMasses[0];
@@ -610,7 +633,7 @@ async function fillUnassigned(month) {
           item.readerId === readerId && item.massId === massId && item.date === date);
       const canBeTitular = (reader, mass, date) =>
         reader?.active && !reader.substituteOnly &&
-        (reader.availability || []).includes(mass.id) &&
+        readerCanServeMass(reader, mass.id) &&
         !readerUsedOnDate(reader.id, mass.id, date);
       const substituteCelebrations = readerId =>
         [...(substituteCelebrationsByReader.get(readerId) || [])]
@@ -624,9 +647,9 @@ async function fillUnassigned(month) {
         !titularMassByReader.has(reader.id) && !substituteCelebrationsByReader.has(reader.id));
 
       function replaceMovedSubstitute(sourceCelebration, removedIndex, movedReaderId) {
-        const replacement = shuffled(unownedReaders()).find(reader =>
-          reader.id !== movedReaderId &&
-          (reader.availability || []).includes(sourceCelebration.massId));
+        const replacement = shuffled(unownedReaders())
+          .filter(reader => reader.id !== movedReaderId && readerCanServeMass(reader, sourceCelebration.massId))
+          .sort((a,b) => Number(readerPrefersMass(b,sourceCelebration.massId)) - Number(readerPrefersMass(a,sourceCelebration.massId)))[0];
         if (!replacement) return;
         sourceCelebration.ids.splice(removedIndex, 0, replacement.id);
         substituteCelebrationsByReader.set(
@@ -643,7 +666,8 @@ async function fillUnassigned(month) {
             .map(role => ({ mass, date, role }))));
 
       for (const { mass, date, role } of missingSlots) {
-        const candidates = shuffled(readers);
+        const candidates = shuffled(readers).sort((a,b) =>
+          Number(readerPrefersMass(b,mass.id)) - Number(readerPrefersMass(a,mass.id)));
         const targetKey = celebrationKey(mass.id, date);
         const targetCelebration = celebrationSubstitutes.get(targetKey) || {
           massId: mass.id, date, ids: []
@@ -651,35 +675,31 @@ async function fillUnassigned(month) {
         if (!celebrationSubstitutes.has(targetKey)) {
           celebrationSubstitutes.set(targetKey, targetCelebration);
         }
-        let reader = candidates.find(candidate =>
-          targetCelebration.ids.includes(candidate.id) &&
-          belongsOnlyToMassAsSubstitute(candidate.id, mass.id) &&
-          canBeTitular(candidate, mass, date));
-
-        if (!reader) {
-          reader = candidates.find(candidate =>
+        const chooseCandidate = preferred => {
+          const pool=candidates.filter(candidate=>readerPrefersMass(candidate,mass.id)===preferred);
+          let selected = pool.find(candidate =>
+            targetCelebration.ids.includes(candidate.id) &&
+            belongsOnlyToMassAsSubstitute(candidate.id, mass.id) &&
+            canBeTitular(candidate, mass, date));
+          if (!selected) selected = pool.find(candidate =>
             !titularMassByReader.has(candidate.id) &&
             !substituteCelebrationsByReader.has(candidate.id) &&
             canBeTitular(candidate, mass, date));
-        }
-
-        if (!reader) {
-          reader = candidates.find(candidate => {
+          if (!selected) selected = pool.find(candidate => {
             const celebrations = substituteCelebrations(candidate.id);
             return !titularMassByReader.has(candidate.id) &&
               celebrations.length === 1 &&
               celebrations[0].massId !== mass.id &&
               canBeTitular(candidate, mass, date);
           });
-        }
-
-        if (!reader) {
-          reader = candidates.find(candidate =>
+          if (!selected) selected = pool.find(candidate =>
             titularMassByReader.get(candidate.id) === mass.id &&
             (!substituteCelebrationsByReader.has(candidate.id) ||
               belongsOnlyToMassAsSubstitute(candidate.id, mass.id)) &&
             canBeTitular(candidate, mass, date));
-        }
+          return selected;
+        };
+        const reader = chooseCandidate(true) || chooseCandidate(false);
         if (!reader) continue;
 
         const sourceCelebrations = substituteCelebrations(reader.id);
@@ -908,18 +928,23 @@ async function api(req, res, url) {
           phone: value.phone,
           notes: value.notes,
           availability: value.availability,
+          preferredMassIds: value.preferredMassIds,
+          unavailableMassIds: value.unavailableMassIds,
+          preferenceModel: value.preferenceModel,
           substituteOnly: value.substituteOnly
         } },
         { returnDocument: 'after' }
       );
       const today = costaRicaDateTime().slice(0, 10);
+      const allowedMassIds = await database.collection('masses').find({ active: true }).project({ id: 1 }).toArray();
+      const serviceableMassIds = value.active ? allowedMassIds.map(item => item.id).filter(massId => !value.unavailableMassIds.includes(massId)) : [];
       const titularFilter = value.substituteOnly
         ? { readerId: id, date: { $gte: today } }
-        : { readerId: id, date: { $gte: today }, massId: { $nin: value.availability } };
+        : { readerId: id, date: { $gte: today }, massId: { $nin: serviceableMassIds } };
       await Promise.all([
         database.collection('assignments').deleteMany(titularFilter),
         database.collection('assignments').updateMany(
-          { date: { $gte: today }, massId: { $nin: value.availability }, substituteIds: id },
+          { date: { $gte: today }, massId: { $nin: serviceableMassIds }, substituteIds: id },
           { $pull: { substituteIds: id } }
         )
       ]);
@@ -987,7 +1012,8 @@ async function api(req, res, url) {
         database.collection('readers').findOne({ id: cleanText(input.readerId, 80), active: true }),
         database.collection('masses').findOne({ id: cleanText(input.massId, 80), active: true })
       ]);
-      if (!reader) throw new Error('Lector inválido');
+      if (!reader || reader.substituteOnly) throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : 'Lector inválido');
+      if (!mass || !readerCanServeMass(reader, mass.id)) throw new Error('Este lector indicó que no puede asistir a esta misa');
       const replacementMonth = cleanText(input.month, 7) || cleanText(input.date, 10).slice(0, 7);
       const otherUse = await database.collection('assignments').findOne({
         month: replacementMonth,
@@ -1038,7 +1064,7 @@ async function api(req, res, url) {
         id: { $in: requestedIds }, active: true
       }).toArray() : [];
       const validIds = new Set(validReaders
-        .filter(reader => (reader.availability || []).includes(massId))
+        .filter(reader => readerCanServeMass(reader, massId))
         .map(reader => reader.id));
       const substituteIds = requestedIds.filter(readerId => validIds.has(readerId) && !titularIds.has(readerId));
       if (!substituteIds.length) throw new Error('Cada misa debe conservar al menos un suplente');
@@ -1118,7 +1144,8 @@ async function api(req, res, url) {
       if (!result) return json(res, 404, { error: 'Registro no encontrado' });
       const today = costaRicaDateTime().slice(0, 10);
       if (resource === 'readers') {
-        const allowedMassIds = value.active ? value.availability : [];
+        const masses = await database.collection('masses').find({ active: true }).project({ id: 1 }).toArray();
+        const allowedMassIds = value.active ? masses.map(item => item.id).filter(massId => !value.unavailableMassIds.includes(massId)) : [];
         const titularFilter = value.active && !value.substituteOnly
           ? { readerId: id, date: { $gte: today }, massId: { $nin: allowedMassIds } }
           : { readerId: id, date: { $gte: today } };
@@ -1151,6 +1178,10 @@ async function api(req, res, url) {
 
 function serve(req, res, url) {
   let requested = url.pathname === '/' ? '/index.html' : url.pathname;
+  if (requested === '/estadisticas.html') {
+    res.writeHead(302, { ...securityHeaders(), Location: '/login.html', 'Cache-Control': 'no-store' });
+    return res.end();
+  }
   const adminPage = requested === '/adminmode.html' || requested.startsWith('/admin/');
   if (adminPage && !adminSession(req)) {
     res.writeHead(302, { ...securityHeaders(), Location: '/login.html', 'Cache-Control': 'no-store' });

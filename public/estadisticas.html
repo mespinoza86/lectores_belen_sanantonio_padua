@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f3e8">
+  <title>Estadísticas · Lectores</title>
+  <link rel="stylesheet" href="/private/styles.css">
+</head>
+<body data-page="statistics">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">✦</span><div><b>Lectores</b><small>Plan pastoral</small></div></div>
+    <nav>
+      <a class="nav" href="/adminmode.html"><span>⌂</span> Inicio</a>
+      <a class="nav" href="/admin/index.html#calendar"><span>▦</span> Calendario</a>
+      <a class="nav" href="/admin/lectores.html"><span>♙</span> Lectores</a>
+      <a class="nav" href="/admin/misas.html"><span>♢</span> Misas</a>
+      <a class="nav" href="/admin/asignar.html"><span>✓</span> Asignar</a>
+      <a class="nav" href="/admin/reporte.html"><span>↗</span> Reporte</a>
+      <a class="nav active" href="/admin/estadisticas.html"><span>▥</span> Estadísticas</a>
+    </nav>
+    <div class="access-actions"><button class="nav admin-only" id="logoutBtn"><span>&#8617;</span> Cerrar sesi&oacute;n</button></div>
+    <div class="sidebar-note"><b>Lectura de datos</b><span>La disponibilidad refleja las misas elegidas por cada lector activo.</span></div>
+  </aside>
+  <main>
+    <header><button id="menuBtn" class="icon-btn menu">☰</button><div><p class="eyebrow">ADMINISTRACIÓN</p><h1>Estadísticas de disponibilidad</h1></div></header>
+    <section>
+      <div class="section-head"><div><p class="eyebrow">COBERTURA POR HORARIO</p><h2>Disponibilidad para servir</h2><p>Compara cuántas personas están disponibles con los puestos mínimos de cada misa.</p></div></div>
+      <div id="availabilitySummary" class="stats availability-summary"></div>
+      <div id="availabilityGrid" class="availability-grid"><article class="card"><p>Cargando estadísticas…</p></article></div>
+      <div class="reader-statistics-section">
+        <div class="section-head"><div><p class="eyebrow">RESPUESTAS DE LOS LECTORES</p><h2>Confirmaciones por lector</h2><p>Consulta quién confirmó y quién avisó que no asistiría durante un mes.</p></div><label class="statistics-month-picker">Mes<input id="statisticsMonth" type="month"></label></div>
+        <div id="readerConfirmationSummary" class="stats availability-summary"></div>
+        <div class="reader-statistics-note"><b>Importante:</b> “No asistirá” significa que el lector rechazó previamente la asignación. No representa una ausencia comprobada después de celebrarse la misa.</div>
+        <div id="readerConfirmationTable" class="reader-confirmation-wrap"><p class="empty">Cargando respuestas…</p></div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/private/js/estadisticas.js"></script>
+</body>
+</html>

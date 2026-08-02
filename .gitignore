@@ -1,4 +1,5 @@
 node_modules/
 data/*.tmp
+data/private/
 .env
 .DS_Store

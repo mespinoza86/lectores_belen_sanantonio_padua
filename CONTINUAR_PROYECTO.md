@@ -658,3 +658,123 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - El texto del diálogo distingue ahora entre una asignación sobre un puesto vacío y un reemplazo directo de una persona por otra.
 - `node --check server.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
 - Se reinició el proceso de Node de `localhost:3000`; la aplicación volvió a responder con HTTP 200 mediante el proceso nuevo.
+
+## Actualización del 2 de agosto de 2026
+
+### Filtro de asignaciones por lector
+
+- Se agregó en `public/asignar.html`, antes del listado de misas, un selector **Filtrar por lector** y un botón **Limpiar**.
+- El selector incluye todos los lectores y filtra las asignaciones del mes actualmente seleccionado.
+- Una misa coincide cuando el lector seleccionado participa en ella como titular o aparece en la lista de suplentes de alguna de sus celebraciones durante ese mes.
+- Las misas coincidentes se muestran completas, con todas sus fechas, funciones, titulares y suplentes; el filtro no oculta a los demás integrantes.
+- Si el lector no participa en ninguna misa del mes, se muestra un mensaje específico con su nombre y el mes consultado.
+- **Limpiar** elimina el filtro y restaura el listado completo; permanece desactivado mientras no haya un lector seleccionado.
+- El filtro es exclusivamente visual y no modifica asignaciones ni datos en MongoDB.
+- Al cambiar de mes se conserva el lector elegido y se recalculan las misas coincidentes para el nuevo mes.
+- Los lectores del selector se ordenan alfabéticamente y el diseño se adapta a pantallas pequeñas.
+- Se actualizaron `public/asignar.html`, `private/js/common.js` y `private/styles.css`.
+- `node --check private/js/common.js` y `git diff --check` finalizaron correctamente; este último solo informó las advertencias existentes de conversión futura de LF a CRLF.
+
+### Estadísticas administrativas de disponibilidad por misa
+
+- Se creó la página independiente `public/estadisticas.html`, disponible mediante `/admin/estadisticas.html` y visible únicamente para administradores.
+- Se agregó el enlace **Estadísticas** a la navegación administrativa de las páginas principales; permanece oculto en modo público.
+- El servidor protege la ruta `/admin/estadisticas.html` con la sesión administrativa y redirige al login cuando no existe una sesión válida.
+- El acceso directo público a `/estadisticas.html` también se redirige al login, por lo que la protección no depende solamente de ocultar el enlace.
+- La página utiliza `private/js/estadisticas.js` para consultar lectores y misas después de validar tanto la marca administrativa de la pestaña como la sesión del servidor.
+- Las estadísticas incluyen únicamente lectores activos y misas activas.
+- Cada misa muestra su nombre, día o fecha, hora, total de personas disponibles y el desglose entre lectores normales y lectores configurados como **Solo suplente**.
+- Las tarjetas se ordenan empezando por las misas con menor disponibilidad para facilitar la detección de horarios con problemas.
+- La cobertura mínima se calcula como la cantidad de funciones titulares configuradas más un suplente.
+- Una misa se clasifica como **Insuficiente** si no tiene suficientes lectores normales para sus funciones o si el total no cubre las funciones más un suplente.
+- Se clasifica como **Ajustada** cuando cubre el mínimo pero dispone de un margen de hasta dos personas adicionales, y como **Suficiente** cuando tiene un margen mayor.
+- La vista incluye indicadores generales de lectores activos, misas activas, coberturas insuficientes y coberturas ajustadas, además de barras comparativas y colores verde, amarillo y rojo.
+- Se actualizaron `server.js`, `private/styles.css` y la navegación de `public/index.html`, `public/lectores.html`, `public/misas.html`, `public/asignar.html` y `public/reporte.html`; se agregaron `public/estadisticas.html` y `private/js/estadisticas.js`.
+- `node --check server.js`, `node --check private/js/estadisticas.js`, `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- No se pudo realizar la comprobación HTTP dinámica porque no había una instancia local respondiendo en `localhost:3000` durante la verificación.
+
+### Estadísticas mensuales de confirmación por lector
+
+- Se amplió la página administrativa `public/estadisticas.html` con una sección independiente **Confirmaciones por lector**.
+- La sección incluye un selector de mes, inicializado con el mes actual de `America/Costa_Rica`.
+- Para cada lector con actividad en el mes se muestran las cantidades de asignaciones confirmadas, avisos de que no asistirá y respuestas pendientes.
+- Las confirmaciones se calculan a partir de asignaciones con `confirmationStatus: confirmed`.
+- Los avisos de no asistencia se calculan mediante las entradas `action: declined` conservadas en `confirmationHistory`; esto permite atribuir el rechazo al lector original aunque posteriormente haya entrado un suplente.
+- La vista aclara que **No asistirá** representa una decisión comunicada antes de la misa y no una ausencia física comprobada después de la celebración, porque el sistema todavía no registra asistencia real posterior.
+- También se muestra el porcentaje de confirmación entre las decisiones ya registradas. Las asignaciones pendientes no se incluyen en ese porcentaje.
+- Los lectores se ordenan primero por mayor cantidad de rechazos, después por confirmaciones y finalmente por nombre.
+- Solo aparecen lectores con confirmaciones, rechazos o asignaciones pendientes durante el mes consultado; si no existen registros se presenta un mensaje específico para ese mes.
+- El resumen mensual muestra confirmaciones totales, avisos de no asistencia, respuestas pendientes y cantidad de lectores con al menos un rechazo.
+- Se actualizaron `public/estadisticas.html`, `private/js/estadisticas.js` y `private/styles.css`.
+- `node --check private/js/estadisticas.js`, `node --check server.js` y `git diff --check` finalizaron correctamente; las únicas advertencias fueron las conocidas sobre conversión futura de LF a CRLF.
+
+### Preferencias, alternativas y restricciones de misa por lector
+
+- El modelo de disponibilidad de cada lector pasó de una selección binaria a tres estados por misa: **Preferida**, **Puedo asistir** y **No puedo asistir**.
+- Se agregaron los campos `preferredMassIds`, `unavailableMassIds` y `preferenceModel` a los lectores. `availability` se conserva temporalmente como copia de las preferencias para compatibilidad con datos y clientes anteriores.
+- Los lectores antiguos que todavía no tengan los campos nuevos continúan interpretándose con la regla anterior: las misas incluidas en `availability` son posibles y las demás no lo son. Al guardarlos desde el formulario nuevo quedan migrados al modelo de tres estados.
+- Los formularios administrativos y **Editar mis datos** muestran una sola elección por cada misa, lo cual impide marcar un mismo horario simultáneamente como preferido e imposible.
+- Las tarjetas de lectores muestran por separado las misas preferidas, aquellas donde también pueden servir y aquellas a las que no pueden asistir.
+- Las rutas del servidor rechazan titularidades, reemplazos y suplencias en una misa marcada como **No puedo asistir**. La restricción se aplica en el servidor además de ocultar esos candidatos en los selectores.
+- Los selectores manuales muestran primero a quienes prefieren la misa y después a quienes pueden asistir como alternativa. Los lectores de **Solo suplente** continúan excluidos de puestos titulares.
+- La asignación aleatoria conserva las reglas anteriores de rotación de titulares, suplentes, funciones e historial, pero agrega una penalización prioritaria muy alta a los horarios no preferidos.
+- El emparejamiento intenta llenar todas las funciones y el suplente mínimo usando preferencias. Solamente recurre a una misa neutral cuando es necesario para conseguir una solución completa. Las misas imposibles nunca generan candidatos.
+- Los suplentes adicionales se distribuyen primero entre las misas preferidas compatibles y luego, si hace falta, entre alternativas permitidas.
+- **Asignar no asignados** realiza una búsqueda completa con candidatos preferidos antes de intentar cualquiera de las categorías de respaldo con lectores neutrales.
+- Cuando se traslada un suplente y se busca reemplazo para la celebración de origen, también se prioriza a quienes prefieren ese horario.
+- Al editar un lector, las titularidades y suplencias futuras se limpian únicamente para las misas que ahora haya marcado como imposibles, además de mantener las reglas existentes para inactividad y **Solo suplente**.
+- Las estadísticas administrativas por misa ahora muestran cuántos lectores la prefieren, cuántos podrían servir como alternativa y cuántos no pueden asistir.
+- La cobertura se clasifica como **Preferida suficiente** cuando las preferencias cubren todas las funciones y un suplente, **Requiere alternativas** cuando solo se completa usando horarios neutrales e **Insuficiente** cuando ni siquiera todas las personas permitidas alcanzan.
+- Se agregó `scripts/migrate-reader-preferences.js` y el comando `npm run migrate:reader-preferences` para generar datos ficticios de preferencia y restricción en los lectores actuales.
+- La migración distribuye una preferencia principal entre las misas activas, agrega aleatoriamente algunas preferencias y restricciones adicionales y conserva como preferida cualquier misa donde el lector ya aparezca asignado, evitando invalidar la planificación existente.
+- Se intentó ejecutar la migración primero en el entorno restringido y después con acceso autorizado. MongoDB no llegó a modificarse porque la conexión falló antes de establecerse con `querySrv ECONNREFUSED _mongodb._tcp.cluster0.5uov4sm.mongodb.net`, el problema DNS local ya documentado.
+- Por tanto, el código admite inmediatamente los lectores actuales mediante compatibilidad heredada, pero sus nuevos campos aleatorios continúan pendientes de aplicarse cuando Atlas sea accesible.
+- Se actualizaron `server.js`, `private/js/common.js`, `private/js/estadisticas.js`, `private/styles.css` y `package.json`; se agregó `scripts/migrate-reader-preferences.js`.
+- `node --check` finalizó correctamente para `server.js`, `private/js/common.js`, `private/js/estadisticas.js` y el script de migración. `git diff --check` no encontró errores, solo las advertencias conocidas de LF a CRLF.
+- Durante la verificación inicial `npm test` informó que faltaba `test/server.test.js`. La carpeta apareció posteriormente en el espacio de trabajo sin ser creada ni modificada como parte de este cambio; al repetir la ejecución, las 7 pruebas existentes aprobaron y ninguna falló.
+
+### Fase 1 de revisión del PDF de lectores reales
+
+- Se leyó el PDF real `Ministros de la Palabra_San Antonio.pdf`; el archivo con prefijo `._` es únicamente metadata auxiliar de macOS.
+- El documento contiene 31 respuestas de SurveyMonkey y seis horarios: sábado 4:00 p. m., sábado 6:30 p. m., domingo 7:00 a. m., domingo 11:00 a. m., domingo 4:00 p. m. y domingo 6:00 p. m.
+- Se encontraron 30 nombres únicos porque una misma persona aparece dos veces con respuestas idénticas. Para la importación debe conservarse una sola copia.
+- Treinta respuestas indican que la persona es lectora activa. Una persona omitió esa pregunta y debe confirmarse su estado antes de importar.
+- Las 31 respuestas indican interés en continuar sirviendo.
+- Veintiséis respuestas indican que la persona realiza moniciones y cinco indican que no.
+- Existen tres nombres escritos únicamente con el primer nombre y deben confirmarse sus apellidos antes de importar.
+- Una respuesta marca domingo 4:00 p. m. simultáneamente como horario preferido y como horario que no funciona; debe resolverse antes de importar.
+- La fase 1 fue únicamente de lectura y análisis. No se modificaron lectores, asignaciones ni MongoDB y todavía no se generaron contraseñas.
+
+#### CSV revisado para la futura importación
+
+- Se creó `data/lectores_reales_revision.csv` con los 30 lectores únicos extraídos del PDF.
+- El archivo contiene nombre, estado activo, teléfono vacío, estado de **Solo suplente**, misas preferidas, misas alternativas, misas no disponibles y capacidad para realizar moniciones.
+- María Auxiliadora Rodríguez se conservó una sola vez; la respuesta duplicada idéntica no se incluyó.
+- Para José Francisco Zumbado Arce, domingo 4:00 p. m. quedó únicamente como **No puede asistir** y se retiró de sus preferencias.
+- Oscar Fdo. Arrieta Villalobos quedó marcado como lector activo por confirmación del usuario.
+- El nombre incompleto `Lissette` fue reemplazado por `Lissete Salas`, respetando la escritura confirmada por el usuario.
+- Los nombres `Ana` y `Patricia` permanecen temporalmente solo con su primer nombre.
+- Todos los teléfonos permanecen vacíos y todos los lectores quedaron inicialmente como lectores normales, no como **Solo suplente**, porque el PDF no define esa condición.
+- El CSV no contiene contraseñas. Las credenciales temporales se generarán únicamente durante la fase de importación aprobada posteriormente.
+- `Import-Csv` confirmó 30 filas, las ocho columnas esperadas y las cuatro correcciones anteriores.
+- MongoDB no fue modificado como parte de esta preparación.
+- Se corrigió posteriormente el horario que el PDF mostraba como sábado 6:30 p. m.: el horario real es **sábado 6:00 p. m.**. Todas sus apariciones en preferencias, alternativas y restricciones del CSV fueron actualizadas.
+- El resumen del CSV corregido contiene 30 lectores activos, 25 que realizan moniciones, 5 que no realizan moniciones y ninguno marcado inicialmente como **Solo suplente**.
+- Distribución por misa en el orden preferida / alternativa / no disponible: sábado 4:00 p. m. = 12 / 5 / 13; sábado 6:00 p. m. = 16 / 5 / 9; domingo 7:00 a. m. = 8 / 3 / 19; domingo 11:00 a. m. = 10 / 4 / 16; domingo 4:00 p. m. = 8 / 7 / 15; domingo 6:00 p. m. = 14 / 7 / 9.
+- Domingo 7:00 a. m. es el horario con menor cobertura posible, con 11 personas entre preferencias y alternativas. Sábado 6:00 p. m. y domingo 6:00 p. m. tienen la mayor cobertura posible, con 21 personas cada uno.
+
+### Fase 2: importación de lectores reales
+
+- La conexión `mongodb+srv://` continuó fallando desde el proceso administrado con `querySrv ECONNREFUSED`, pero se logró una conexión segura construida en memoria con los tres nodos semilla de Atlas, TLS y las mismas credenciales privadas, sin mostrar la URI.
+- Antes de modificar datos se ejecutó `scripts/import-real-readers.js --check`. La validación confirmó 30 lectores y la coincidencia exacta de los seis horarios del CSV con las misas activas de MongoDB, incluido sábado 6:00 p. m.
+- Se agregó `data/private/` a `.gitignore` para excluir respaldos y credenciales de Git.
+- La importación se ejecutó mediante `scripts/import-real-readers.js --apply` dentro de una transacción de MongoDB.
+- Antes de la transacción se creó el respaldo privado `data/private/respaldo-antes-lectores-reales-2026-08-02T18-59-58-331Z.json` con los lectores y asignaciones anteriores.
+- Se eliminaron las asignaciones y lectores ficticios y se insertaron los 30 lectores reales aprobados. Las seis misas configuradas se conservaron intactas.
+- Los 30 lectores quedaron activos, con teléfono vacío, como lectores normales, con el modelo de preferencias y restricciones, y con `mustChangePassword: true`.
+- Cada lector recibió una contraseña temporal aleatoria de 12 caracteres y MongoDB conserva únicamente su hash bcrypt.
+- Las credenciales legibles quedaron exclusivamente en el archivo privado ignorado por Git `data/private/credenciales-temporales-lectores-2026-08-02T18-59-58-331Z.csv`.
+- Por decisión del usuario, el dato de moniciones del PDF no restringe funciones: todos los lectores continúan siendo candidatos para Moniciones según las reglas generales.
+- La verificación posterior `scripts/import-real-readers.js --verify` confirmó 30 lectores, 30 activos, 30 cambios de contraseña pendientes y 0 asignaciones antiguas.
+- La API local confirmó igualmente 30 lectores y 0 asignaciones.
+- Antes de editar lectores o generar la nueva planificación debe reiniciarse `node server.js` desde la terminal de VS Code que sí conecta con Atlas, para asegurar que el proceso cargue las reglas nuevas de preferencias y restricciones implementadas en `server.js`.
