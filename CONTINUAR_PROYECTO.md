@@ -841,3 +841,38 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - Junto a cada lector se indica dónde participa durante el mes: como titular o suplente y el nombre de la misa correspondiente. Si no participa, aparece **Sin asignación en este mes**.
 - Los titulares y suplentes oficiales de la misa seleccionada tienen una etiqueta adicional para identificarlos rápidamente.
 - La sección no contiene controles de edición y no muestra teléfonos, contraseñas ni otros datos privados. Cualquier modificación real continúa realizándose desde la sección administrativa de asignaciones.
+
+## Actualización del 3 de agosto de 2026
+
+### Filtro de asignaciones por misa
+
+- Se agregó a `public/asignar.html` el selector **Filtrar por misa**, junto al filtro existente por lector.
+- El selector incluye las misas activas que tienen celebraciones en el mes consultado y muestra el nombre y horario de cada una.
+- Al escoger una misa, el tablero conserva visibles todas sus fechas, funciones, titulares y suplentes del mes.
+- El filtro por misa puede combinarse con **Filtrar por lector**. Cuando ambos están seleccionados, la misa aparece únicamente si el lector participa en ella como titular o suplente durante ese mes.
+- Cuando un lector no participa en la misa seleccionada se muestra un mensaje específico, sin alterar las asignaciones.
+- El botón **Limpiar** restablece simultáneamente los filtros de lector y misa, y permanece desactivado cuando ninguno está activo.
+- El filtro es exclusivamente visual, funciona en modo público y administrativo y no requiere cambios en MongoDB ni en la API.
+- Se ajustó `private/styles.css` para que los dos selectores y el botón se apilen correctamente en pantallas de hasta 700 px.
+- Se actualizaron `public/asignar.html`, `private/js/common.js` y `private/styles.css`.
+- `node --check private/js/common.js` y `git diff --check` finalizaron correctamente. Las advertencias de Git corresponden solamente a la conversión conocida de LF a CRLF.
+- `npm test` finalizó con las 7 pruebas aprobadas y 0 fallidas.
+
+### Noticias y avisos pastorales
+
+- Se creó la sección pública **Noticias**, disponible en `/noticias.html`, y su versión administrativa protegida en `/admin/noticias.html`.
+- Se agregó el enlace **Noticias** a la navegación de las páginas principales y de Estadísticas.
+- Las noticias se almacenan en la nueva colección `news` de MongoDB, con índices por identificador y vigencia.
+- Cada noticia contiene título, mensaje, fecha y hora de inicio, fecha y hora de expiración, estado activo, fecha de creación y fecha de actualización.
+- El servidor valida que título y mensaje existan, que las fechas sean reales y que la expiración sea posterior al inicio.
+- La vigencia se calcula con la zona horaria `America/Costa_Rica`. La API pública devuelve únicamente noticias activas cuyo inicio ya llegó y cuya expiración todavía no ha pasado.
+- En modo administrador se pueden crear, editar, activar, desactivar y eliminar noticias. Las noticias programadas, vencidas e inactivas permanecen visibles como historial administrativo con su estado correspondiente.
+- La escritura y eliminación de noticias requieren una sesión administrativa válida; una comprobación HTTP confirmó que un `POST /api/news` sin sesión recibe HTTP 401.
+- Cuando no existen noticias activas, `noticias.html` muestra un estado vacío amigable. En Inicio no se agrega ningún bloque y el contenido permanece igual.
+- Cuando existe una noticia activa, Inicio muestra un aviso fijo. Cuando existen varias, se presenta un carrusel que cambia cada cinco segundos, con controles anterior/siguiente e indicadores para seleccionar una noticia.
+- El carrusel se pausa durante la interacción con mouse o teclado y la lista pública se actualiza cada minuto para retirar noticias vencidas sin recargar manualmente la página.
+- Los mensajes se insertan como texto escapado y no admiten HTML libre, evitando que el contenido administrativo introduzca scripts o marcado inseguro.
+- Se agregaron `public/noticias.html` y `private/js/noticias.js`. Se actualizaron `server.js`, `private/js/common.js`, `private/styles.css`, las páginas principales de navegación y `test/server.test.js`.
+- `node --check` finalizó correctamente para `server.js`, `private/js/common.js` y `private/js/noticias.js`; `git diff --check` no encontró errores, aparte de las advertencias conocidas de LF a CRLF.
+- La suite aumentó a 8 pruebas: todas aprobaron y ninguna falló. La prueba nueva comprueba la validación de contenido, orden temporal y fechas imposibles.
+- Se reinició la instancia local con el código actualizado. `/api/news` y `/noticias.html` respondieron HTTP 200; al momento de verificar existían 0 noticias activas y no se crearon datos ficticios.

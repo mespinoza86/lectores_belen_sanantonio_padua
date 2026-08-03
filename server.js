@@ -230,6 +230,23 @@ function validateMass(input) {
   if (type === 'once' && !/^\d{4}-\d{2}-\d{2}$/.test(input.date || '')) throw new Error('Fecha inválida');
   return { name, time, roles, type, weekday: type === 'weekly' ? +input.weekday : null, date: type === 'once' ? input.date : null, active: input.active !== false };
 }
+function validateNews(input) {
+  const title = cleanText(input.title, 140);
+  const message = cleanText(input.message, 2000);
+  const validDateTime = value => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || '');
+    if (!match) return false;
+    const [, year, month, day, hour, minute] = match.map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day && date.getUTCHours() === hour && date.getUTCMinutes() === minute;
+  };
+  const startsAt = validDateTime(input.startsAt) ? input.startsAt : costaRicaDateTime();
+  const expiresAt = validDateTime(input.expiresAt) ? input.expiresAt : '';
+  if (!title || !message) throw new Error('El título y el mensaje son obligatorios');
+  if (!expiresAt) throw new Error('La fecha y hora de expiración son obligatorias');
+  if (expiresAt <= startsAt) throw new Error('La expiración debe ser posterior al inicio de la noticia');
+  return { title, message, startsAt, expiresAt, active: input.active !== false };
+}
 async function validateAssignment(input) {
   const massId = cleanText(input.massId, 80), readerId = cleanText(input.readerId, 80), role = cleanText(input.role, 60);
   const substituteIds = Array.isArray(input.substituteIds)
@@ -952,6 +969,37 @@ async function api(req, res, url) {
     } catch (error) { return passwordRouteError(res, error); }
   }
   if (req.method !== 'GET' && !requireAdmin(req, res)) return;
+  if (resource === 'news') {
+    const collection = database.collection('news');
+    try {
+      if (req.method === 'GET') {
+        const query = adminSession(req) ? {} : { active: true, startsAt: { $lte: costaRicaDateTime() }, expiresAt: { $gt: costaRicaDateTime() } };
+        const values = await collection.find(query).sort({ startsAt: -1, createdAt: -1 }).toArray();
+        return json(res, 200, values.map(publicDoc));
+      }
+      if (req.method === 'POST') {
+        const value = validateNews(await body(req));
+        const document = { id: crypto.randomUUID(), ...value, createdAt: new Date(), updatedAt: new Date() };
+        await collection.insertOne(document);
+        return json(res, 201, publicDoc(document));
+      }
+      if (req.method === 'PUT' && id) {
+        const value = validateNews(await body(req));
+        const updated = await collection.findOneAndUpdate({ id }, { $set: { ...value, updatedAt: new Date() } }, { returnDocument: 'after' });
+        if (!updated) return json(res, 404, { error: 'Noticia no encontrada' });
+        return json(res, 200, publicDoc(updated));
+      }
+      if (req.method === 'DELETE' && id) {
+        const result = await collection.deleteOne({ id });
+        if (!result.deletedCount) return json(res, 404, { error: 'Noticia no encontrada' });
+        return json(res, 200, { ok: true });
+      }
+      return json(res, 405, { error: 'Método no permitido' });
+    } catch (error) {
+      console.error('Error de noticias:', error.message);
+      return json(res, 400, { error: error.message });
+    }
+  }
   if (resource === 'readers' && id && action === 'reset-password' && req.method === 'POST') {
     try {
       const temporaryPassword = temporaryReaderPassword();
@@ -1234,6 +1282,8 @@ async function start() {
     database.collection('masses').createIndex({ id: 1 }, { unique: true }),
     database.collection('assignments').createIndex({ id: 1 }, { unique: true }),
     database.collection('assignments').createIndex({ massId: 1, role: 1, month: 1, date: 1 }, { unique: true }),
+    database.collection('news').createIndex({ id: 1 }, { unique: true }),
+    database.collection('news').createIndex({ active: 1, startsAt: 1, expiresAt: 1 }),
     database.collection('auth_rate_limits').createIndex({ action: 1, targetId: 1 }, { unique: true }),
     database.collection('auth_rate_limits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   ]);
@@ -1256,5 +1306,5 @@ process.on('SIGTERM', shutdown);
 module.exports = {
   server, start, body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
-  publicDoc, costaRicaDateTime
+  publicDoc, costaRicaDateTime, validateNews
 };

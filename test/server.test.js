@@ -6,7 +6,7 @@ process.env.ADMIN_PASSWORD = 'test-admin-password-that-is-not-secret';
 const {
   body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
-  publicDoc, costaRicaDateTime
+  publicDoc, costaRicaDateTime, validateNews
 } = require('../server');
 
 test('la sesión administrativa firmada acepta tokens válidos y rechaza alteraciones', () => {
@@ -49,4 +49,13 @@ test('el lector de JSON rechaza cuerpos mayores de 1 MB', async () => {
 
 test('la fecha del servidor se expresa en la zona horaria de Costa Rica', () => {
   assert.equal(costaRicaDateTime(new Date('2026-07-16T18:30:00Z')), '2026-07-16T12:30');
+});
+
+test('las noticias exigen contenido y una expiración posterior al inicio', () => {
+  assert.deepEqual(validateNews({ title: 'Formación', message: 'Sábado a las 2 p. m.', startsAt: '2026-08-03T10:00', expiresAt: '2026-08-10T23:59', active: true }), {
+    title: 'Formación', message: 'Sábado a las 2 p. m.', startsAt: '2026-08-03T10:00', expiresAt: '2026-08-10T23:59', active: true
+  });
+  assert.throws(() => validateNews({ title: 'Aviso', message: 'Texto', startsAt: '2026-08-10T10:00', expiresAt: '2026-08-09T10:00' }), /posterior al inicio/);
+  assert.throws(() => validateNews({ title: '', message: 'Texto', expiresAt: '2026-08-10T10:00' }), /obligatorios/);
+  assert.throws(() => validateNews({ title: 'Aviso', message: 'Texto', startsAt: '2026-08-03T10:00', expiresAt: '2026-02-31T10:00' }), /expiración/);
 });

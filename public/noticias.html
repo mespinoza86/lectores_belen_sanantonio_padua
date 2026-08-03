@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f3e8">
+  <title>Noticias · Lectores</title>
+  <link rel="stylesheet" href="/private/styles.css">
+</head>
+<body data-page="news">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">✦</span><div><b>Lectores</b><small>Plan pastoral</small></div></div>
+    <nav>
+      <a class="nav" data-page-link href="/index.html"><span>⌂</span> Inicio</a>
+      <a class="nav" data-page-link href="/asignar.html"><span>✓</span> Asignar</a>
+      <a class="nav active" data-page-link href="/noticias.html"><span>◈</span> Noticias</a>
+      <a class="nav" data-page-link href="/cobertura.html"><span>⌕</span> Cobertura</a>
+      <a class="nav" data-page-link href="/reporte.html"><span>↗</span> Reporte</a>
+      <a class="nav admin-only" href="/admin/estadisticas.html"><span>▥</span> Estadísticas</a>
+    </nav>
+    <div class="access-actions">
+      <a class="nav user-only" href="/login.html"><span>&#9881;</span> Administrador</a>
+      <button class="nav admin-only" id="logoutBtn"><span>&#8617;</span> Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main>
+    <header><button id="menuBtn" class="icon-btn menu">☰</button><div><p class="eyebrow">PARROQUIA</p><h1>Noticias</h1></div></header>
+    <section class="news-page">
+      <div class="section-head"><div><p class="eyebrow">COMUNIDAD</p><h2>Noticias y avisos</h2><p class="user-only">Consulta las actividades y avisos vigentes de la comunidad.</p><p class="admin-only">Publica avisos y administra también las noticias programadas o vencidas.</p></div><button class="primary admin-only" id="newNews">＋ Nueva noticia</button></div>
+      <div id="newsSummary" class="news-admin-summary admin-only"></div>
+      <div id="newsList" class="news-list"><div class="empty">Cargando noticias…</div></div>
+    </section>
+  </main>
+
+  <dialog id="newsDialog"><form id="newsForm"><div class="dialog-head"><div><p class="eyebrow">AVISO</p><h3 id="newsDialogTitle">Nueva noticia</h3></div><button type="button" class="icon-btn close">×</button></div><input type="hidden" name="id"><label>Título<input name="title" maxlength="140" required placeholder="Ej. Formación de lectores"></label><label>Mensaje<textarea name="message" maxlength="2000" rows="6" required placeholder="Incluye los detalles importantes de la actividad."></textarea></label><div class="form-row"><label>Mostrar desde<input type="datetime-local" name="startsAt" required></label><label>Mostrar hasta<input type="datetime-local" name="expiresAt" required></label></div><label class="check"><input type="checkbox" name="active" checked> Noticia activa</label><p class="hint">Al llegar la fecha de expiración dejará de mostrarse públicamente, pero permanecerá en el historial administrativo.</p><div class="actions"><button type="button" class="secondary close">Cancelar</button><button class="primary">Guardar noticia</button></div></form></dialog>
+  <div id="toast" class="toast"></div>
+  <script src="/private/js/noticias.js"></script>
+</body>
+</html>
