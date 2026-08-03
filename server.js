@@ -1068,13 +1068,23 @@ async function api(req, res, url) {
         .map(reader => reader.id));
       const substituteIds = requestedIds.filter(readerId => validIds.has(readerId) && !titularIds.has(readerId));
       if (!substituteIds.length) throw new Error('Cada misa debe conservar al menos un suplente');
-      const usedInOtherMass = monthAssignments.some(item =>
-        item.massId !== massId &&
-        (item.substituteIds || []).some(readerId => substituteIds.includes(readerId)));
-      if (usedInOtherMass) {
-        throw new Error('Un suplente solo puede pertenecer a una misa durante el mes');
+      const mongoSession = client.startSession();
+      try {
+        await mongoSession.withTransaction(async () => {
+          await database.collection('assignments').updateMany(
+            { month, massId: { $ne: massId }, substituteIds: { $in: substituteIds } },
+            { $pull: { substituteIds: { $in: substituteIds } } },
+            { session: mongoSession }
+          );
+          await database.collection('assignments').updateMany(
+            { massId, month },
+            { $set: { substituteIds } },
+            { session: mongoSession }
+          );
+        });
+      } finally {
+        await mongoSession.endSession();
       }
-      await database.collection('assignments').updateMany({ massId, month }, { $set: { substituteIds } });
       return json(res, 200, { substituteIds });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
@@ -1189,6 +1199,7 @@ function serve(req, res, url) {
   }
   if (requested === '/adminmode.html') requested = '/index.html';
   if (requested.startsWith('/admin/')) requested = requested.slice('/admin'.length);
+  if (requested === '/cobertura.html') requested = '/asignar.html';
   try { requested = decodeURIComponent(requested); } catch { res.writeHead(400, securityHeaders()); return res.end(); }
   const privateAsset = requested.startsWith('/private/');
   const root = privateAsset ? PRIVATE : PUBLIC;

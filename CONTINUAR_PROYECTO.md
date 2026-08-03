@@ -778,3 +778,66 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - La verificación posterior `scripts/import-real-readers.js --verify` confirmó 30 lectores, 30 activos, 30 cambios de contraseña pendientes y 0 asignaciones antiguas.
 - La API local confirmó igualmente 30 lectores y 0 asignaciones.
 - Antes de editar lectores o generar la nueva planificación debe reiniciarse `node server.js` desde la terminal de VS Code que sí conecta con Atlas, para asegurar que el proceso cargue las reglas nuevas de preferencias y restricciones implementadas en `server.js`.
+
+### Planificación de agosto de 2026 importada desde imágenes
+
+- Se revisaron tres imágenes con la planificación de las seis misas semanales de agosto de 2026 y se transcribieron sus titulares, fechas y rotaciones de funciones.
+- **Monitor** en las imágenes se vinculó con la función **Moniciones** configurada en las misas.
+- La columna rotulada `Marco y Lizzette` para sábado 6:00 p. m. se asignó únicamente a Marco Espinoza, según indicación expresa del usuario.
+- Antes de escribir se confirmó en MongoDB que los siete lectores agregados por el usuario existen y están activos: John Corredor, Flor Maria Rosales, Evelia Ramirez, Vicky Murillo, Andrea Sanabria, Wendy Vargas y Ligia Zumbado.
+- También se confirmó que Kary Hernández Gonzalez ya tiene domingo 7:00 a. m. como misa preferida y no como restricción.
+- Se agregó `scripts/import-august-2026-plan.js` con modos `--check`, `--apply` y `--verify`.
+- El modo de validación comprobó que existen todos los lectores, que cada titular puede servir en su misa, que cada celebración contiene las cuatro funciones únicas y que los suplentes pertenecen exclusivamente a horarios preferidos.
+- La importación reemplazó únicamente las asignaciones de `2026-08` dentro de una transacción y conservó intactos lectores, misas y otros meses.
+- Se guardaron 120 documentos de asignación: 6 misas × 5 fechas × 4 funciones titulares, equivalentes a 30 celebraciones completas.
+- No fue posible colocar cuatro suplentes distintos en cada misa: las imágenes utilizan 24 titulares únicos y, con 37 lectores totales, solamente quedan 13 personas libres. Cuatro suplentes por seis horarios habrían requerido 24 lectores adicionales.
+- Los 13 lectores libres se distribuyeron todos en misas preferidas, con dos suplentes por horario y tres en domingo 7:00 a. m., el horario de menor cobertura.
+- Suplentes: sábado 4:00 p. m. = Rudy Juan José Villaseca Figueroa y Marisol Solano Campos; sábado 6:00 p. m. = Lissete Salas y Juan Sebastián Quirós Murillo; domingo 7:00 a. m. = Dominik Hodgson, Elvira Ortiz y María Chaves Casanova; domingo 11:00 a. m. = José Antonio González Vega y Mauricio Cartín; domingo 4:00 p. m. = Mauren Aguilar Villanea y Juan Luis Mena Soto; domingo 6:00 p. m. = Ana y Gloriela Mora.
+- Las listas de suplentes se aplican a las cinco fechas de su misma misa y ninguna persona pertenece a dos horarios.
+- Antes de reemplazar agosto se creó `data/private/respaldo-asignaciones-agosto-antes-imagenes-2026-08-02T22-14-34-730Z.json`, excluido de Git.
+- La verificación posterior confirmó exactamente 120 asignaciones, 30 celebraciones y coincidencia completa de titulares, fechas, funciones y suplentes con el plan validado.
+
+### Candidatos preferidos y alternativos en las asignaciones
+
+- Los desplegables del modo administrador para titulares, suplentes y reemplazos muestran todos los lectores que pueden servir en la misa; solamente excluyen a quienes la marcaron como no disponible.
+- Las opciones aparecen separadas en dos grupos: **Misa preferida** y **Disponible como alternativa**. Cada nombre indica además **Preferida** o **No preferida**.
+- Los lectores configurados como **Solo suplente** continúan excluidos de los puestos titulares y de los reemplazos titulares, pero pueden aparecer en los desplegables de suplentes.
+- La asignación aleatoria ya aplicaba el mismo criterio: da una prioridad muy alta a las misas preferidas y usa horarios neutrales únicamente cuando hacen falta para completar la planificación.
+- La función para completar espacios sin asignar intenta primero lectores que prefieren la misa y después lectores que pueden asistir aunque no la tengan como preferida.
+- Las validaciones del servidor rechazan únicamente lectores inactivos, incompatibles por función o que marcaron la misa como no disponible; una misa neutral es una selección válida.
+- Se validó la sintaxis de `private/js/common.js` y `server.js`; las siete pruebas automatizadas terminaron correctamente.
+- Ajuste posterior solicitado: el desplegable de suplentes también muestra candidatos preferidos y alternativos que ya estén como suplentes de otra misa del mes. Al seleccionarlos, el servidor los retira de la misa anterior y los traslada a la nueva dentro de una transacción, por lo que nunca quedan duplicados.
+- Los lectores que ya son titulares durante el mes no aparecen como candidatos a suplente, ya que trasladarlos automáticamente dejaría funciones titulares vacías. Los lectores configurados como **Solo suplente** sí aparecen normalmente.
+
+### Reasignación exclusiva de suplentes de agosto de 2026
+
+- Por solicitud del usuario se recalcularon únicamente los suplentes de agosto, sin modificar ninguno de los 120 documentos titulares ni sus funciones.
+- MongoDB confirmó 37 lectores activos, 24 titulares únicos y 13 lectores libres. Con la regla de una sola misa por persona durante el mes, el máximo posible es 13 suplentes; llegar a cuatro por cada una de las seis misas requeriría 24 personas libres.
+- Se agregó `scripts/rebalance-august-2026-substitutes.js`, que intenta colocar hasta cuatro suplentes por misa, prioriza preferencias, equilibra las cantidades y verifica el resultado después de escribir.
+- Se asignaron los 13 lectores libres y todos quedaron en una misa preferida: domingo 7:00 a. m. recibió tres suplentes y los otros cinco horarios recibieron dos cada uno.
+- Distribución final: domingo 7:00 a. m. = Dominik Hodgson, Elvira Ortiz y María Chaves Casanova; domingo 11:00 a. m. = José Antonio González Vega y Mauricio Cartín; domingo 4:00 p. m. = Marisol Solano Campos y Mauren Aguilar Villanea; domingo 6:00 p. m. = Ana y Gloriela Mora; sábado 4:00 p. m. = Rudy Juan José Villaseca Figueroa y Juan Luis Mena Soto; sábado 6:00 p. m. = Lissete Salas y Juan Sebastián Quirós Murillo.
+- Antes de aplicar se creó el respaldo privado e ignorado por Git `data/private/respaldo-suplentes-agosto-2026-08-02T22-45-38-593Z.json`.
+- La interfaz administrativa muestra siempre un mínimo de cuatro espacios numerados para suplentes en cada misa. Cuando no hay suficientes personas, los espacios restantes permanecen como **Sin asignar**; si ya existen más de cuatro suplentes, todos continúan visibles.
+
+### Reporte en formato tradicional
+
+- Se conservó el reporte mensual existente y se añadió una segunda presentación inspirada en las imágenes de planificación que utiliza el ministerio.
+- El formato tradicional agrupa cada misa en una tabla azul con cuatro columnas de titulares; debajo de cada nombre aparecen las fechas del mes y su función abreviada como Primera, Segunda, Salmo o Monitor.
+- Debajo de cada misa aparecen cuatro espacios numerados para suplentes. Los espacios que no estén cubiertos muestran **Sin asignar**.
+- La sección Reporte incluye tres acciones: **PDF actual**, **PDF tradicional** e **Imagen tradicional**.
+- El PDF tradicional se prepara en orientación horizontal, con dos misas por página cuando el navegador respeta la configuración de impresión. El usuario puede elegir **Guardar como PDF** en el diálogo de impresión.
+- La imagen tradicional se genera directamente en el navegador como un PNG de alta resolución que contiene todas las misas del mes seleccionado.
+- La vista y las exportaciones son dinámicas: usan el mes seleccionado, las misas activas y las asignaciones guardadas, por lo que no están limitadas a agosto de 2026.
+- El formato se agregó a `asignar.html`, `reporte.html` y las demás páginas compartidas que contienen la sección de reporte.
+- Ajuste posterior: el botón **PDF tradicional** utiliza ahora exactamente el mismo lienzo gráfico que genera **Imagen tradicional**. El PDF y el PNG comparten colores, bordes, proporciones, tipografía, distribución y espacios de suplentes; el PDF ya no reconstruye el diseño con estilos de impresión separados.
+
+### Sección pública de cobertura por misa
+
+- Se añadió una nueva sección de solo lectura llamada **Cobertura**, disponible tanto para lectores como para administradores mediante `/cobertura.html` y `/admin/cobertura.html`.
+- La vista utiliza por defecto el mes actual de Costa Rica, igual que el resto del planificador. El selector mensual del encabezado permite consultar otros meses.
+- El usuario selecciona una misa y puede buscar lectores por nombre.
+- Para la misa seleccionada se muestran totales de titulares, suplentes oficiales, lectores que la prefieren y lectores que pueden asistir como alternativa.
+- Todos los lectores activos aparecen clasificados en tres grupos: **Prefieren esta misa**, **Pueden asistir como alternativa** y **No pueden asistir**.
+- Junto a cada lector se indica dónde participa durante el mes: como titular o suplente y el nombre de la misa correspondiente. Si no participa, aparece **Sin asignación en este mes**.
+- Los titulares y suplentes oficiales de la misa seleccionada tienen una etiqueta adicional para identificarlos rápidamente.
+- La sección no contiene controles de edición y no muestra teléfonos, contraseñas ni otros datos privados. Cualquier modificación real continúa realizándose desde la sección administrativa de asignaciones.
