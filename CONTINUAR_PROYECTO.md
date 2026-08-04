@@ -955,3 +955,20 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - No fue necesario modificar el servidor ni MongoDB.
 - `node --check private/js/noticias.js` y `git diff --check` finalizaron correctamente.
 - `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+### Fechas de vigencia ocultas en Noticias públicas
+
+- Las noticias en modo público ya no muestran los campos **Desde** y **Hasta**.
+- Las fechas de inicio y expiración continúan visibles en modo administrador para permitir la gestión de la vigencia de cada aviso.
+- La API conserva sin cambios su filtrado temporal: el público solo recibe noticias activas que ya comenzaron y todavía no vencieron.
+- Se actualizó `private/js/noticias.js`.
+- `node --check private/js/noticias.js` y `git diff --check` finalizaron correctamente.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+### Intervalo del carrusel de Noticias
+
+- El carrusel de noticias de Inicio ahora cambia automáticamente cada 10 segundos en lugar de cada 5 segundos.
+- Se conservaron los controles anterior/siguiente, los indicadores y la pausa durante la interacción con mouse o teclado.
+- Se actualizó `private/js/common.js`.
+- `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
