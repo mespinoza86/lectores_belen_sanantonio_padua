@@ -876,3 +876,82 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - `node --check` finalizó correctamente para `server.js`, `private/js/common.js` y `private/js/noticias.js`; `git diff --check` no encontró errores, aparte de las advertencias conocidas de LF a CRLF.
 - La suite aumentó a 8 pruebas: todas aprobaron y ninguna falló. La prueba nueva comprueba la validación de contenido, orden temporal y fechas imposibles.
 - Se reinició la instancia local con el código actualizado. `/api/news` y `/noticias.html` respondieron HTTP 200; al momento de verificar existían 0 noticias activas y no se crearon datos ficticios.
+
+### Diagnóstico del botón Ver asignaciones de Inicio
+
+- El botón **Ver asignaciones** de `public/index.html` no navega a `/asignar.html`.
+- Es un elemento `button` con `data-view="assign"` y no contiene un enlace `href`.
+- El manejador compartido de `private/js/common.js` intercepta cualquier elemento con `data-view` y ejecuta `showView('assign')`.
+- Esta función permanece en la misma URL y activa la sección interna `<section id="assign">` que todavía está incluida dentro de `public/index.html`.
+- La causa es la arquitectura anterior de vistas internas: varias páginas conservan copias de las secciones compartidas, aunque la navegación lateral sí utiliza el archivo independiente `/asignar.html`.
+- No se modificó el funcionamiento durante este diagnóstico.
+
+### Navegación de Inicio a la página de asignaciones
+
+- El botón principal **Ver asignaciones / Crear asignaciones** de `public/index.html` se convirtió en un enlace real hacia `/asignar.html`.
+- El atributo compartido `data-page-link` transforma automáticamente el destino en `/admin/asignar.html` cuando la página está en modo administrador; en modo público conserva `/asignar.html`.
+- Se eliminó de `public/index.html` la sección interna duplicada `#assign`, por lo que Inicio ya no genera ni muestra allí el tablero de asignaciones.
+- La lógica compartida de `private/js/common.js` ahora renderiza y conecta los eventos del tablero únicamente cuando `#assignmentBoard` existe. Esto permite retirar el tablero de Inicio sin afectar la página independiente de asignaciones.
+- Se agregó un estilo específico en `private/styles.css` para que el nuevo enlace conserve la apariencia del botón principal y no muestre subrayado.
+- Se actualizaron `public/index.html`, `private/js/common.js` y `private/styles.css`.
+- `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+### Confirmaciones semanales en formato de acordeón
+
+- La sección **Misas de esta semana** de Inicio ahora presenta cada celebración como un acordeón compacto.
+- Todas las misas aparecen cerradas inicialmente y muestran únicamente su nombre, fecha, hora y una flecha de apertura.
+- Al pulsar el encabezado o utilizarlo desde el teclado se despliegan las funciones, lectores, estados de confirmación, controles disponibles, suplentes y la acción de reporte cuando corresponda.
+- Al pulsarlo nuevamente se contrae la información y la flecha gira para indicar visualmente el estado.
+- Cada misa se abre y cierra de forma independiente; no se abre ninguna automáticamente.
+- La implementación utiliza los elementos HTML nativos `details` y `summary`, manteniendo accesibilidad por teclado sin agregar estado manual innecesario en JavaScript.
+- Se actualizaron `private/js/common.js` y `private/styles.css`.
+- `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+### Propuesta pendiente: sustitución acordada para una celebración específica
+
+- Se identificó un caso frecuente que los suplentes oficiales de una misa no siempre resuelven: el titular consigue por su cuenta a una persona asignada o suplente de otro horario que puede cubrirlo únicamente en una fecha concreta.
+- La solución propuesta es un flujo de **sustitución acordada para una celebración específica**, independiente de la planificación mensual y sin requerir que ambas personas estén juntas ni utilicen el mismo teléfono.
+- Flujo propuesto:
+  - El titular pulsa **Solicitar sustitución** en su asignación concreta.
+  - Valida su identidad mediante su contraseña personal.
+  - Selecciona a la persona con quien previamente acordó el posible reemplazo.
+  - El sistema crea una solicitud pendiente y genera un enlace único para compartir.
+  - El titular utiliza una acción **Enviar por WhatsApp** para mandar el enlace al sustituto.
+  - El sustituto abre el enlace desde su propio dispositivo, revisa la misa, fecha y función, y valida su identidad con su propia contraseña.
+  - El sustituto puede aceptar o rechazar la solicitud.
+  - Solo después de su aceptación se registra el reemplazo para esa misa, fecha y función exactas.
+- El enlace por sí solo no debe autorizar el cambio. Debe contener un token aleatorio, ser de un solo uso, tener vencimiento y exigir la contraseña del sustituto seleccionado.
+- El enlace debe quedar inválido después de aceptar, rechazar, vencer o alcanzar la hora de inicio de la misa.
+- El titular debería poder consultar los estados **Esperando respuesta**, **Sustitución aceptada**, **Solicitud rechazada** y **Solicitud vencida**.
+- Se recomienda conservar en el historial el titular original, el sustituto acordado, las fechas de solicitud y respuesta y las decisiones de ambas personas, en lugar de sobrescribir sin trazabilidad el `readerId` original.
+- La interfaz podría mostrar el resultado como **Juan Pérez — sustituye a Marco Espinoza**.
+- El sustituto conservaría sus asignaciones y suplencias habituales de otros horarios porque el cambio sería una excepción puntual, siempre que no tenga una celebración incompatible en la misma fecha y hora.
+- Reglas propuestas: ambas personas deben estar activas; el sustituto no debe tener conflicto de horario; debe verificarse su disponibilidad para la misa; y el administrador debe conservar la capacidad de cancelar o corregir el acuerdo.
+- Si el sustituto rechaza o no responde, la asignación original permanece y continúa disponible el procedimiento normal con suplentes oficiales.
+- Esta funcionalidad se documentó únicamente como propuesta para una implementación futura. No se modificó el código ni MongoDB.
+
+### Eliminación de la vista Calendario
+
+- Se eliminó completamente la función **Calendario** porque no aportaba suficiente utilidad al flujo actual.
+- Se retiró el acceso **Calendario** de la navegación compartida en `public/index.html`, `public/lectores.html`, `public/misas.html`, `public/asignar.html` y `public/reporte.html`.
+- También se retiró el enlace administrativo al calendario de `public/estadisticas.html`.
+- Se eliminó el botón **Ver calendario →** de la sección **Misas de esta semana** en todas las páginas que conservan la vista de Inicio.
+- Se eliminaron las secciones internas `#calendar` y los contenedores `#calendarGrid` de las páginas compartidas.
+- Se retiraron de `private/js/common.js` la función `renderCalendar`, su llamada durante el renderizado y el título de vista asociado.
+- Se eliminaron de `private/styles.css` los estilos exclusivos de la cuadrícula mensual, días y eventos del calendario, incluidos sus ajustes móviles.
+- Los textos generales del encabezado ahora hablan de **planificación** en lugar de calendario.
+- Se conservaron las funciones de fechas y ocurrencias que siguen siendo necesarias para asignaciones, confirmaciones, cobertura y reportes.
+- Una búsqueda completa confirmó que no quedan referencias a `calendar`, `calendario`, `calendarGrid`, `renderCalendar`, `cal-head` ni `cal-event` en `public`, `private` o `server.js`.
+- `node --check private/js/common.js`, `node --check server.js` y `git diff --check` finalizaron correctamente.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+### Menú completo en Noticias
+
+- Se corrigió la navegación de `public/noticias.html`, que tenía un menú independiente y omitía los accesos **Lectores** y **Misas**.
+- Se agregaron ambos enlaces en el mismo orden del menú principal: Inicio, Lectores, Misas, Asignar, Noticias, Cobertura y Reporte.
+- Los nuevos enlaces utilizan `data-page-link`, por lo que `private/js/noticias.js` conserva `/lectores.html` y `/misas.html` en modo público y los transforma en `/admin/lectores.html` y `/admin/misas.html` en modo administrador.
+- No fue necesario modificar el servidor ni MongoDB.
+- `node --check private/js/noticias.js` y `git diff --check` finalizaron correctamente.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.

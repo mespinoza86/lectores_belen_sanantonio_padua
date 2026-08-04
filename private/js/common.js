@@ -88,7 +88,7 @@ function currentWeekEvents() {
     .sort((a,b)=>`${a.date}${a.mass.time}`.localeCompare(`${b.date}${b.mass.time}`));
 }
 function render() {
-  renderDashboard(); renderReaders(); renderMasses(); renderAssignments(); renderCalendar(); renderCoverage(); renderReport();
+  renderDashboard(); renderReaders(); renderMasses(); if ($('#assignmentBoard')) renderAssignments(); renderCoverage(); renderReport();
   if (!isAdmin) $$('.assign-select').forEach(select => { select.disabled = true; });
 }
 function renderDashboard() {
@@ -97,7 +97,7 @@ function renderDashboard() {
   const slots = state.masses.filter(x => x.active).flatMap(x => occurrences(x).flatMap(date => x.roles.map(role => ({x,role,date}))));
   const filled = slots.filter(({x,role,date}) => assignment(x.id, role, date)).length;
   $('#assignedCount').textContent = `${slots.length ? Math.round(filled/slots.length*100) : 0}%`;
-  $('#heroCopy').textContent = `Prepara y comparte el calendario de ${monthLabel(state.month).toLowerCase()}.`;
+  $('#heroCopy').textContent = `Prepara y comparte la planificación de ${monthLabel(state.month).toLowerCase()}.`;
   const events = currentWeekEvents();
   $('#upcoming').innerHTML = events.length ? events.map(({mass,date}) => {
     const reserves=state.assignments.find(a=>a.massId===mass.id&&a.date===date&&a.substituteIds?.length)?.substituteIds||[];
@@ -112,7 +112,7 @@ function renderDashboard() {
     }).join('');
     const hasEnded=hasMassEnded(date,mass.time);
     const reportAction=hasEnded?`<div class="eucharist-report-action"><button class="primary open-eucharist-report" data-mass="${mass.id}" data-date="${date}">Crear reporte de Eucaristía</button></div>`:'';
-    return `<article class="weekly-mass"><div class="weekly-mass-head"><div><b>${esc(mass.name)}</b><small>${esc(formatDate(date))} · ${mass.time}</small></div></div>${roles}<div class="weekly-reserves"><b>Suplentes:</b> ${reserves.length?reserves.map((id,index)=>`${index+1}. ${esc(readerName(id))}`).join(' · '):'Sin suplentes disponibles'}</div>${reportAction}</article>`;
+    return `<details class="weekly-mass"><summary class="weekly-mass-head"><div><b>${esc(mass.name)}</b><small>${esc(formatDate(date))} · ${mass.time}</small></div><span class="weekly-mass-arrow" aria-hidden="true">⌄</span></summary><div class="weekly-mass-content">${roles}<div class="weekly-reserves"><b>Suplentes:</b> ${reserves.length?reserves.map((id,index)=>`${index+1}. ${esc(readerName(id))}`).join(' · '):'Sin suplentes disponibles'}</div>${reportAction}</div></details>`;
   }).join('') : '<div class="empty">No hay celebraciones programadas para esta semana.</div>';
   renderNewsCarousel();
   renderPendingReports();
@@ -187,17 +187,6 @@ function renderAssignments() {
       : `${readerName(assignmentReaderFilter)} no participa como titular ni suplente en ${monthLabel(state.month)}.`)
     : emptyCard('Nada que asignar','Agrega una misa que ocurra durante este mes.');
 }
-function renderCalendar() {
-  const [y,m] = state.month.split('-').map(Number), first = new Date(y,m-1,1), last = new Date(y,m,0).getDate();
-  const start = (first.getDay()+6)%7, today=costaRicaToday(), names=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-  let html=names.map(x=>`<div class="cal-head">${x}</div>`).join('');
-  for(let cell=0;cell<Math.ceil((start+last)/7)*7;cell++) {
-    const day=cell-start+1, valid=day>0&&day<=last, date=valid?`${state.month}-${String(day).padStart(2,'0')}`:'';
-    const events=valid?allEvents().filter(x=>x.date===date):[];
-    html+=`<div class="day ${valid?'':'muted'} ${date===today?'today':''}">${valid?`<span class="day-number">${day}</span>`:''}${events.map(({mass})=>{const pending=mass.roles.some(r=>!assignment(mass.id,r,date));return `<div class="cal-event ${pending?'pending':''}" title="${esc(mass.name)} · ${mass.time}">${mass.time} ${esc(mass.name)}</div>`}).join('')}</div>`;
-  }
-  $('#calendarGrid').innerHTML=html;
-}
 function readerMonthPlacements(readerId){const titularMassIds=[...new Set(state.assignments.filter(item=>item.month===state.month&&item.readerId===readerId).map(item=>item.massId))],substituteMassIds=[...new Set(state.assignments.filter(item=>item.month===state.month&&(item.substituteIds||[]).includes(readerId)).map(item=>item.massId))];const labels=[];titularMassIds.forEach(id=>labels.push(`Titular · ${state.masses.find(mass=>mass.id===id)?.name||'Misa'}`));substituteMassIds.forEach(id=>labels.push(`Suplente · ${state.masses.find(mass=>mass.id===id)?.name||'Misa'}`));return labels}
 function renderCoverage(){const massSelect=$('#coverageMass'),content=$('#coverageContent');if(!massSelect||!content)return;const masses=state.masses.filter(mass=>mass.active&&occurrences(mass).length).sort((a,b)=>`${occurrences(a)[0]}${a.time}`.localeCompare(`${occurrences(b)[0]}${b.time}`));if(!masses.some(mass=>mass.id===coverageMassId))coverageMassId=masses[0]?.id||'';massSelect.innerHTML=masses.map(mass=>`<option value="${esc(mass.id)}" ${mass.id===coverageMassId?'selected':''}>${esc(mass.name)} · ${esc(massSchedule(mass))}</option>`).join('');const mass=masses.find(item=>item.id===coverageMassId);if(!mass){content.innerHTML='<div class="empty">No hay misas activas durante este mes.</div>';return}const monthAssignments=state.assignments.filter(item=>item.month===state.month),massAssignments=monthAssignments.filter(item=>item.massId===mass.id),titularIds=new Set(massAssignments.map(item=>item.readerId).filter(Boolean)),substituteIds=new Set(massAssignments.flatMap(item=>item.substituteIds||[])),query=coverageSearch.trim().toLocaleLowerCase('es'),readers=state.readers.filter(reader=>reader.active&&(!query||reader.name.toLocaleLowerCase('es').includes(query))),groups=[{title:'Prefieren esta misa',kind:'preferred',readers:readers.filter(reader=>readerPrefersMass(reader,mass.id))},{title:'Pueden asistir como alternativa',kind:'flexible',readers:readers.filter(reader=>readerCanServeMass(reader,mass.id)&&!readerPrefersMass(reader,mass.id))},{title:'No pueden asistir',kind:'unavailable',readers:readers.filter(reader=>!readerCanServeMass(reader,mass.id))}];const official=(reader)=>titularIds.has(reader.id)?'<span class="coverage-badge titular">Titular de esta misa</span>':substituteIds.has(reader.id)?'<span class="coverage-badge substitute">Suplente de esta misa</span>':'';const card=reader=>{const placements=readerMonthPlacements(reader.id);return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b>${official(reader)}</div><small>${placements.length?placements.map(esc).join(' · '):'Sin asignación en este mes'}</small></article>`};content.innerHTML=`<div class="coverage-selected-summary"><div><span>Titulares de esta misa</span><b>${titularIds.size}</b></div><div><span>Suplentes oficiales</span><b>${substituteIds.size}</b></div><div><span>Lectores que la prefieren</span><b>${groups[0].readers.length}</b></div><div><span>Alternativas posibles</span><b>${groups[1].readers.length}</b></div></div><div class="coverage-groups">${groups.map(group=>`<section class="coverage-group ${group.kind}"><div class="coverage-group-head"><h3>${group.title}</h3><span>${group.readers.length}</span></div><div class="coverage-reader-list">${group.readers.length?group.readers.sort((a,b)=>Number(Boolean(official(b)))-Number(Boolean(official(a)))||a.name.localeCompare(b.name,'es')).map(card).join(''):'<p class="empty">No hay lectores en esta categoría.</p>'}</div></section>`).join('')}</div>`}
 function renderReport() {
@@ -249,7 +238,7 @@ function openSelfEditAccess(id,name){
   }
   const form=$('#selfEditAccessForm');form.reset();form.elements.id.value=id;$('#selfEditReaderName').textContent=name;dialog.showModal();form.elements.password.focus();
 }
-function showView(id){$$('.view').forEach(x=>x.classList.toggle('active',x.id===id));$$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.view===id));$('#pageTitle').textContent={dashboard:'Buenos días',calendar:'Calendario',readers:'Lectores',masses:'Misas',assign:'Asignaciones',coverage:'Cobertura por misa',report:'Reporte mensual'}[id];$('.sidebar').classList.remove('open');window.scrollTo(0,0)}
+function showView(id){$$('.view').forEach(x=>x.classList.toggle('active',x.id===id));$$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.view===id));$('#pageTitle').textContent={dashboard:'Buenos días',readers:'Lectores',masses:'Misas',assign:'Asignaciones',coverage:'Cobertura por misa',report:'Reporte mensual'}[id];$('.sidebar').classList.remove('open');window.scrollTo(0,0)}
 
 document.addEventListener('click', async e => {
   const go=e.target.closest('[data-view]'); if(go){showView(go.dataset.view);return}
@@ -326,7 +315,7 @@ function chooseAssignmentScope(select){
     dialog.addEventListener('close',cancel,{once:true});
   });
 }
-$('#assignmentBoard').addEventListener('change',async e=>{
+$('#assignmentBoard')?.addEventListener('change',async e=>{
   if(!e.target.matches('.assign-select'))return;
   const select=e.target,{mass,role,date,reader:previousReaderId}=select.dataset;
   const scope=await chooseAssignmentScope(select);
@@ -340,7 +329,7 @@ $('#assignmentBoard').addEventListener('change',async e=>{
     await load();
   }catch(x){toast(x.message,true);await load()}
 });
-$('#assignmentBoard').addEventListener('change',async e=>{if(!e.target.matches('.substitute-select'))return;const group=e.target.closest('.date-reserves'),substituteIds=[...group.querySelectorAll('.substitute-select')].map(select=>select.value).filter((id,index,all)=>id&&all.indexOf(id)===index);try{await request('/api/substitutes',{method:'POST',body:JSON.stringify({massId:group.dataset.mass,date:group.dataset.date,substituteIds})});toast('Lista de suplentes actualizada');await load()}catch(x){toast(x.message,true)}});
+$('#assignmentBoard')?.addEventListener('change',async e=>{if(!e.target.matches('.substitute-select'))return;const group=e.target.closest('.date-reserves'),substituteIds=[...group.querySelectorAll('.substitute-select')].map(select=>select.value).filter((id,index,all)=>id&&all.indexOf(id)===index);try{await request('/api/substitutes',{method:'POST',body:JSON.stringify({massId:group.dataset.mass,date:group.dataset.date,substituteIds})});toast('Lista de suplentes actualizada');await load()}catch(x){toast(x.message,true)}});
 $('#month').value=state.month;$('#month').addEventListener('change',e=>{state.month=e.target.value||state.month;render()});
 $('#assignmentReaderFilter')?.addEventListener('change',e=>{assignmentReaderFilter=e.target.value;renderAssignments();if(!isAdmin)$$('.assign-select').forEach(select=>{select.disabled=true})});
 $('#assignmentMassFilter')?.addEventListener('change',e=>{assignmentMassFilter=e.target.value;renderAssignments();if(!isAdmin)$$('.assign-select').forEach(select=>{select.disabled=true})});
