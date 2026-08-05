@@ -918,6 +918,17 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - Se actualizaron `private/js/common.js`, `private/js/noticias.js` y `private/styles.css`.
 - `node --check` finalizó correctamente para ambos JavaScript, `git diff --check` no encontró errores y `npm test` terminó con 8 pruebas aprobadas y 0 fallidas.
 
+### Confirmación al copiar y unificación de Monitor
+
+- Al pulsar **Copiar** en el reporte de Eucaristía se abre ahora un diálogo explícito con el texto **Reporte copiado**, una indicación de que ya puede pegarse en WhatsApp y el botón **Aceptar**.
+- El diálogo de confirmación aparece encima del formulario del reporte y debe cerrarse de manera consciente; ya no se utiliza un aviso temporal para esta acción.
+- Las funciones configuradas con nombres que contengan **Moniciones** o **Monitor** ya no se muestran como un campo dinámico adicional en el reporte.
+- El lector asignado a esa función se precarga únicamente en el campo **Monitor**.
+- El texto copiado para WhatsApp incluye una sola línea **Monitor**, eliminando la duplicación anterior entre **Moniciones** y **Monitor**.
+- Se actualizó `private/js/common.js`.
+- `node --check private/js/common.js`, `git diff --check` y `npm test` finalizaron correctamente; las 8 pruebas aprobaron y ninguna falló.
+- La instancia local dejó de responder en el puerto 3000 durante la comprobación HTTP posterior; no se reinició automáticamente y la revisión final del cambio se completó de forma estática.
+
 ## Contexto adicional del 4 de agosto de 2026
 
 ### Proyecto separado: quiniela deportiva mundialista
