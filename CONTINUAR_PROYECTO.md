@@ -897,6 +897,27 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
 - `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
 
+### Mensajes visibles para errores de contraseña
+
+- Se corrigió el problema por el cual los errores de contraseña se enviaban al aviso global y quedaban ocultos detrás de un diálogo modal abierto.
+- Los errores de **Confirmar**, **No puedo asistir**, **Cambiar contraseña** y **Editar mis datos** aparecen ahora dentro del mismo formulario que solicita la credencial.
+- También se muestra dentro del diálogo el mensaje cuando las dos contraseñas nuevas no coinciden o cuando falla la validación al guardar los datos personales.
+- El mensaje permanece visible para permitir corregir el dato, se limpia al volver a intentar o abrir el formulario nuevamente y utiliza `role="alert"` con `aria-live="polite"` para accesibilidad.
+- El acceso administrativo conserva su mensaje interno existente en `login.html`.
+- Se actualizaron `private/js/common.js` y `private/styles.css`.
+- `node --check private/js/common.js`, `git diff --check` y `npm test` finalizaron correctamente; las 8 pruebas aprobaron y ninguna falló.
+
+### Mensajes internos en los demás diálogos
+
+- Se extendió la corrección de mensajes ocultos a todos los casos detectados donde un diálogo modal permanecía abierto.
+- Los errores al crear o editar lectores, misas y noticias aparecen ahora dentro de su formulario, en lugar de utilizar el aviso global situado detrás del modal.
+- Si la actualización automática de Noticias falla mientras se está editando una noticia, el error también se presenta dentro de ese diálogo.
+- Las acciones **Copiar** de la contraseña temporal y del reporte de Eucaristía muestran ahora una confirmación verde dentro del diálogo abierto.
+- Los mensajes anteriores se eliminan al reabrir el formulario o antes de un nuevo intento.
+- Se reutiliza un componente accesible con `role="alert"` para errores, `role="status"` para confirmaciones y `aria-live="polite"`.
+- Se actualizaron `private/js/common.js`, `private/js/noticias.js` y `private/styles.css`.
+- `node --check` finalizó correctamente para ambos JavaScript, `git diff --check` no encontró errores y `npm test` terminó con 8 pruebas aprobadas y 0 fallidas.
+
 ## Contexto adicional del 4 de agosto de 2026
 
 ### Proyecto separado: quiniela deportiva mundialista
