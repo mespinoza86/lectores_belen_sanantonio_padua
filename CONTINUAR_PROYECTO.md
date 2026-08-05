@@ -897,6 +897,15 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
 - `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
 
+## Contexto adicional del 4 de agosto de 2026
+
+### Proyecto separado: quiniela deportiva mundialista
+
+- El usuario recordó que también se trabajó anteriormente en una quiniela deportiva mundialista.
+- Ese proyecto es independiente de la aplicación Lectores y se encuentra en `https://github.com/mespinoza86/quinieladeportivamundialista.git`.
+- El repositorio público contiene una aplicación principalmente en JavaScript, con servidor Node.js y archivos de equipos, jornadas, jugadores y resultados.
+- Esta referencia se conserva solamente para recuperar el contexto en conversaciones futuras; no se modificó el repositorio de la quiniela ni el código de Lectores.
+
 ### Confirmaciones semanales en formato de acordeón
 
 - La sección **Misas de esta semana** de Inicio ahora presenta cada celebración como un acordeón compacto.
@@ -971,4 +980,50 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - Se conservaron los controles anterior/siguiente, los indicadores y la pausa durante la interacción con mouse o teclado.
 - Se actualizó `private/js/common.js`.
 - `node --check private/js/common.js` y `git diff --check` finalizaron correctamente.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+## Conversación del 4 de agosto de 2026
+
+### Propuesta pendiente de barra de navegación inferior
+
+- El usuario señaló como referencia la barra de la aplicación Quiniela Deportiva, que contiene los accesos **Inicio**, **Jornadas**, **Reglamento** y **Tabla**.
+- El patrón entendido es una barra inferior compacta, siempre disponible y similar a la navegación de una aplicación móvil, con pocos destinos principales y una indicación visual de la sección activa.
+- Se desea evaluar una barra equivalente para la aplicación Lectores, adaptada a sus propias secciones y a su diseño actual.
+- La propuesta solamente fue revisada y documentada. Todavía no se decidió qué accesos incluir ni se modificaron HTML, CSS o JavaScript.
+
+### Barra de navegación inferior para celulares
+
+- Se implementó una barra inferior fija para pantallas de hasta 850 px, inspirada en la navegación de la Quiniela Deportiva.
+- La barra contiene cuatro accesos: **Inicio**, **Lectores**, **Cobertura** y **Asignaciones**.
+- Cada acceso muestra un icono y su texto; la sección actual queda resaltada y utiliza `aria-current="page"` para mejorar la accesibilidad.
+- Las rutas se adaptan automáticamente al modo de uso: en modo público enlazan a las páginas públicas y en modo administrador conservan las rutas protegidas `/admin/...` y `/adminmode.html`.
+- La barra aparece en las páginas principales, Noticias y Estadísticas, pero permanece oculta en escritorio, en el formulario de acceso y durante la impresión.
+- Se reservó espacio al final del contenido para que la barra no tape información, se respetó `safe-area-inset-bottom` para teléfonos con zona segura y los avisos emergentes se muestran por encima de ella.
+- Se agregó `private/js/mobile-nav.js` y se actualizó `private/styles.css`, además de incluir el nuevo script en `public/index.html`, `public/lectores.html`, `public/misas.html`, `public/asignar.html`, `public/reporte.html`, `public/noticias.html` y `public/estadisticas.html`.
+- `node --check` finalizó correctamente para el nuevo script y los JavaScript compartidos; `git diff --check` no encontró errores, aparte de las advertencias conocidas de LF a CRLF.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+### Filtro de la página Lectores por nombre
+
+- Se agregó a `public/lectores.html` un selector **Filtrar por lector** y un botón **Limpiar** antes del listado de tarjetas.
+- Los nombres del selector aparecen ordenados alfabéticamente en español, sin distinguir mayúsculas y minúsculas para el orden.
+- Al seleccionar una persona se muestra únicamente su tarjeta; **Limpiar** restaura el listado completo.
+- El botón permanece desactivado mientras no exista un filtro seleccionado.
+- El filtro es exclusivamente visual, funciona tanto en modo público como administrador y no modifica lectores ni MongoDB.
+- La lista completa de tarjetas también queda presentada alfabéticamente para mantener consistencia con el selector.
+- Se actualizaron `public/lectores.html` y `private/js/common.js`; se reutilizó el diseño adaptable de los filtros de asignaciones.
+- `node --check private/js/common.js` y `git diff --check` finalizaron correctamente; las advertencias corresponden solamente a la conversión conocida de LF a CRLF.
+- `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+### Ojo para mostrar y ocultar contraseñas
+
+- Todos los campos de contraseña de la aplicación muestran ahora un botón con icono de ojo dentro del campo.
+- Las contraseñas permanecen ocultas inicialmente. Al pulsar el ojo se muestran y al pulsarlo nuevamente vuelven a ocultarse.
+- El comportamiento cubre el acceso administrativo, la contraseña actual y las dos entradas de contraseña nueva, la confirmación o rechazo de asistencia y la autenticación para **Editar mis datos**.
+- El componente compartido también detecta campos de contraseña creados dinámicamente después de cargar la página, por lo que cubre los diálogos generados mediante JavaScript y futuros campos equivalentes.
+- Cada campo se controla de forma independiente. Al reiniciar un formulario o cerrar su diálogo, cualquier contraseña visible vuelve automáticamente al estado oculto.
+- El botón tiene un área táctil de 44 px, estados de foco y textos accesibles **Mostrar contraseña** y **Ocultar contraseña** mediante `aria-label`, `aria-pressed` y `title`.
+- Se agregó `private/js/password-toggle.js`, se retiró el control anterior basado en los textos **Mostrar/Ocultar** de `private/js/login.js` y se actualizó el campo de `public/login.html`.
+- El script compartido se incluyó en todas las páginas principales, Noticias, Estadísticas y Login. Los estilos generales se actualizaron en `private/styles.css`.
+- `node --check` finalizó correctamente para `private/js/password-toggle.js`, `private/js/login.js` y `private/js/common.js`; `git diff --check` no encontró errores, aparte de las advertencias conocidas de LF a CRLF.
 - `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.

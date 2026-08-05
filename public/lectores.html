@@ -36,7 +36,7 @@
       <div class="panel"><div class="panel-head"><div><p class="eyebrow">CONFIRMACIONES DE LA SEMANA</p><h3>Misas de esta semana</h3></div></div><div id="upcoming" class="event-list empty">Aún no hay misas configuradas.</div></div>
     </section>
 
-    <section id="readers" class="view"><div class="section-head"><div><p class="eyebrow">EQUIPO</p><h2>Lectores</h2><p><span class="admin-only">Administra las personas disponibles para servir.</span><span class="user-only">Consulta las personas disponibles para servir.</span></p></div><button class="primary admin-only" id="newReader">＋ Nuevo lector</button></div><div id="readerList" class="cards"></div></section>
+    <section id="readers" class="view"><div class="section-head"><div><p class="eyebrow">EQUIPO</p><h2>Lectores</h2><p><span class="admin-only">Administra las personas disponibles para servir.</span><span class="user-only">Consulta las personas disponibles para servir.</span></p></div><button class="primary admin-only" id="newReader">＋ Nuevo lector</button></div><div class="assignment-filter reader-filter"><label for="readerListFilter"><span>Filtrar por lector</span><select id="readerListFilter"><option value="">— Todos los lectores —</option></select></label><button type="button" class="secondary" id="clearReaderListFilter" disabled>Limpiar</button></div><div id="readerList" class="cards"></div></section>
 
     <section id="masses" class="view"><div class="section-head"><div><p class="eyebrow">CELEBRACIONES</p><h2>Misas</h2><p><span class="admin-only">Crea horarios recurrentes o celebraciones especiales.</span><span class="user-only">Consulta los horarios recurrentes y las celebraciones especiales.</span></p></div><button class="primary admin-only" id="newMass">＋ Nueva misa</button></div><div id="massList" class="cards"></div></section>
 
@@ -60,6 +60,8 @@
   <dialog id="eucharistReportDialog"><form id="eucharistReportForm"><div class="dialog-head"><div><p class="eyebrow">REPORTE DE EUCARISTÍA</p><h3 id="eucharistReportHeading">Eucaristía</h3><span id="eucharistReportSchedule" class="hint"></span></div><button type="button" class="icon-btn close">×</button></div><input type="hidden" name="massId"><input type="hidden" name="date"><div id="eucharistRoleFields" class="eucharist-role-fields"></div><div class="form-row"><label>Sacerdote que presidió<input name="priest" placeholder="Nombre del sacerdote" required></label><label>Monitor<input name="monitor" placeholder="Nombre del monitor" required></label></div><label>Nota o mensaje opcional<textarea name="note" rows="3" placeholder="Algún detalle que desee compartir"></textarea></label><label>Reflexión opcional<textarea name="reflection" rows="3" placeholder="Reflexión de la celebración"></textarea></label><div class="report-share-actions"><button type="button" class="secondary" id="copyEucharistReport">Copiar</button><button type="button" class="primary" id="shareEucharistReport">Enviar por WhatsApp</button></div></form></dialog>
 
   <div id="toast" class="toast"></div>
+  <script src="/private/js/password-toggle.js"></script>
+  <script src="/private/js/mobile-nav.js"></script>
   <script src="/private/js/lectores.js"></script>
 </body>
 </html>

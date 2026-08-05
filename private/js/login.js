@@ -1,17 +1,9 @@
 const form = document.querySelector('#loginForm');
 const password = document.querySelector('#password');
 const error = document.querySelector('#loginError');
-const toggle = document.querySelector('#togglePassword');
 
 sessionStorage.removeItem('admin_access_verified');
 const resetPreviousSession = fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
-
-toggle.addEventListener('click', () => {
-  const visible = password.type === 'text';
-  password.type = visible ? 'password' : 'text';
-  toggle.textContent = visible ? 'Mostrar' : 'Ocultar';
-  password.focus();
-});
 
 form.addEventListener('submit', async event => {
   event.preventDefault();

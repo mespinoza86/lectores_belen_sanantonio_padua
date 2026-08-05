@@ -37,6 +37,8 @@
 
   <dialog id="newsDialog"><form id="newsForm"><div class="dialog-head"><div><p class="eyebrow">AVISO</p><h3 id="newsDialogTitle">Nueva noticia</h3></div><button type="button" class="icon-btn close">×</button></div><input type="hidden" name="id"><label>Título<input name="title" maxlength="140" required placeholder="Ej. Formación de lectores"></label><label>Mensaje<textarea name="message" maxlength="2000" rows="6" required placeholder="Incluye los detalles importantes de la actividad."></textarea></label><div class="form-row"><label>Mostrar desde<input type="datetime-local" name="startsAt" required></label><label>Mostrar hasta<input type="datetime-local" name="expiresAt" required></label></div><label class="check"><input type="checkbox" name="active" checked> Noticia activa</label><p class="hint">Al llegar la fecha de expiración dejará de mostrarse públicamente, pero permanecerá en el historial administrativo.</p><div class="actions"><button type="button" class="secondary close">Cancelar</button><button class="primary">Guardar noticia</button></div></form></dialog>
   <div id="toast" class="toast"></div>
+  <script src="/private/js/password-toggle.js"></script>
+  <script src="/private/js/mobile-nav.js"></script>
   <script src="/private/js/noticias.js"></script>
 </body>
 </html>
