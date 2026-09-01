@@ -1216,3 +1216,25 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - En `lectores.html`, `misas.html`, `asignar.html` y `reporte.html`, el botón **Ver asignaciones** del panel ahora navega a la página de asignaciones en vez de cambiar de vista en la misma URL. Es la corrección del 3 de agosto, que antes solo estaba en Inicio.
 - Inicio ahora incluye la sección `assign` oculta, por lo que `renderAssignments()` se ejecuta también allí. No es visible, pero supone trabajo de render adicional. Si se quiere recuperar la decisión del 3 de agosto de no montar el tablero en Inicio, basta con condicionar ese render a la vista activa.
 - Las páginas que no tenían el filtro por lector ahora lo incluyen, dentro de la sección de lectores.
+
+## Backlog al 31 de agosto de 2026
+
+Lista viva de lo que queda pendiente. Está al final del documento a propósito, para no tener que leer toda la bitácora histórica y poder responder de un vistazo en qué punto está el proyecto.
+
+### Aplazado por decisión del usuario
+
+- **Sustitución acordada para una celebración específica.** Diseñada y documentada el 4 de agosto, sin implementar. El 31 de agosto el usuario decidió expresamente no abordarla todavía y dejarla en el backlog. El diseño completo está en la sección *Propuesta pendiente: sustitución acordada para una celebración específica*: solicitud del titular con su contraseña, enlace aleatorio de un solo uso con vencimiento, aceptación del sustituto con su propia contraseña, e historial que conserva al titular original. La deduplicación del HTML ya está hecha, así que ahora se construiría una sola vez en lugar de cinco.
+- **`data/lectores_reales_revision.csv` se conserva rastreado por Git**, con los nombres y horarios de los 30 lectores reales. Decisión expresa del usuario el 31 de agosto. No es un pendiente.
+
+### Seguridad, antes de considerar el proyecto listo para producción
+
+- **Rotar la credencial de MongoDB** compartida en julio y actualizarla en `.env` y en las variables de entorno de Render. Solo puede hacerlo el usuario, desde Atlas.
+- **Limitador del login administrativo.** En `server.js` reinicia el contador a cero al bloquear, así que concede cinco intentos nuevos cada minuto de forma indefinida. Su `Map` en memoria crece sin límite y usa `req.socket.remoteAddress`, que detrás del proxy de Render es la misma dirección para todos: cinco fallos de cualquier visitante bloquean el acceso al administrador. La solución encaja con la colección `auth_rate_limits` que ya se usa para lectores, con retroceso creciente.
+- **Confirmar `NODE_ENV=production` y HTTPS** en el alojamiento, de lo que dependen `Secure` en la cookie y la cabecera HSTS.
+- **Decidir si las notas de los lectores siguen siendo públicas.** Pendiente desde julio.
+
+### Calidad
+
+- **Pruebas de integración de las reglas de asignación**: exclusividad mensual, propagación por alcance, traslado de suplentes y transacciones. Es la parte más delicada del sistema y la única sin cobertura; se rehízo tres veces según el historial.
+- **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado. El HTML necesita revisión en navegador antes, porque el espacio entre elementos en línea afecta al render.
+- **Decidir si Inicio debe montar la sección `assign` oculta.** Tras unificar la plantilla, `renderAssignments()` se ejecuta también en Inicio. No es visible, pero es trabajo de render innecesario y revierte parcialmente la decisión del 3 de agosto. Se resuelve condicionando ese render a la vista activa.
