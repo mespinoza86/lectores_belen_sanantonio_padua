@@ -1296,3 +1296,22 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 - Se agregaron dos pruebas que reproducen el caso exacto de la Misa Domingo 9am y comprueban que una misa semanal cuenta en cualquier mes, que una especial cuenta solo en el suyo, y que un mes sin celebraciones devuelve una lista vacía en vez de fallar.
 - `npm test` finalizó con 20 pruebas aprobadas y 0 fallidas.
 - `fillUnassigned` no necesitaba corrección: ya deriva sus puestos de `massOccurrences`, así que una misa sin fechas en el mes no genera ninguno.
+
+### Endurecimiento de la regla de una sola misa por persona
+
+- Se verificó la regla contra los datos reales: 180 asignaciones de agosto y septiembre, 39 personas implicadas, buscando cinco tipos de violación. **Ninguna.**
+- Los siete caminos que escriben asignaciones ya la aplican: la asignación aleatoria da capacidad 1 a cada lector en el emparejamiento; **Asignar no asignados** valida el resultado completo dentro de la transacción; el cambio manual y la creación borran los puestos en otras misas y retiran a la persona de todas las listas de suplentes del mes; el reemplazo consulta explícitamente si ya participa; la edición de suplentes excluye a los titulares del mes; y el rechazo de asistencia comprueba que el suplente no esté ocupado en otra misa.
+- Sin embargo, `assertReadersBelongToSingleMass`, que es la última red antes de guardar, tenía dos huecos comprobados ejecutándola aislada: **aceptaba ser titular y suplente de la misma misa**, y **aceptaba dos funciones de la misma persona en una misma celebración**. Ambos violan la regla acordada.
+- Se cerraron los dos huecos. Ahora quien es titular no puede aparecer en ninguna banca, ni siquiera la de su propia misa, y nadie puede ocupar dos funciones de una misma celebración.
+- Al endurecerla apareció un fallo real en `fillUnassigned`: al ascender a un suplente a titular limpiaba **una sola** celebración mediante `.find()`. Como la lista de suplentes se repite en cada fecha de la misa, la persona quedaba en la banca de las demás fechas. Se cambió por un bucle que la retira de todas, conservando el respaldo de suplentes solo cuando la celebración de origen es de otra misa, para no alterar el recuento de traslados.
+- La validación endurecida se probó contra los datos reales antes de dar por bueno el cambio: agosto y septiembre pasan por separado. El rechazo al mezclar meses distintos es el esperado, porque la función siempre se invoca con un solo mes.
+- Se agregaron seis pruebas: las tres violaciones entre misas distintas, los dos huecos recién cerrados, y una que comprueba que la rotación normal de funciones a lo largo del mes con banca compartida se sigue aceptando.
+- `npm test` finalizó con 26 pruebas aprobadas y 0 fallidas.
+
+### Anomalía detectada en la planificación de agosto
+
+- Al revisar los datos se encontró que agosto tiene **84 asignaciones con 40 huecos**: faltan funciones sueltas en cinco de las seis misas, y a sábado 4:00 p. m. le falta la fecha del 15 completa.
+- No hay asignaciones huérfanas: todas las que quedan apuntan a lectores existentes.
+- Por las marcas de creación, 82 de esos documentos se escribieron el 31 de agosto por la tarde y 2 el 1 de septiembre, es decir fuera de las operaciones de esta sesión. La sincronización con la encuesta no toca la colección de asignaciones.
+- La lectora **Ana** fue eliminada, no desactivada. Conviene tener presente que `DELETE /api/readers` borra **todas** sus asignaciones de todos los meses, incluido el historial pasado, mientras que desactivar lo conserva.
+- Agosto ya pasó, así que esto solo afecta al reporte histórico. Septiembre está completo y correcto: 96 asignaciones, 0 puestos vacíos, 32 de 32 lectores activos participando.

@@ -15,6 +15,7 @@ const {
   publicDoc,
   publicAssignment,
   massesForMonth,
+  assertReadersBelongToSingleMass,
   assignmentQuery,
   previousMonth,
   costaRicaDateTime,
@@ -318,4 +319,89 @@ test('una misa semanal cuenta en cualquier mes y una especial solo en el suyo', 
   assert.equal(massesForMonth([especial], '2026-11').length, 0);
   // Un mes sin ninguna celebracion no genera puestos en vez de fallar.
   assert.deepEqual(massesForMonth([especial], '2027-01'), []);
+});
+
+// La regla del ministerio: cada persona participa en una sola misa al mes, como
+// titular o como suplente, nunca en ambas.
+const celebracion = (massId, date, role, readerId, substituteIds = []) => ({
+  massId,
+  date,
+  role,
+  readerId,
+  substituteIds,
+  month: '2026-09',
+});
+
+test('la validacion rechaza a un titular colocado en dos misas distintas', () => {
+  assert.throws(
+    () =>
+      assertReadersBelongToSingleMass([
+        celebracion('A', '2026-09-05', 'Primera', 'x'),
+        celebracion('B', '2026-09-06', 'Salmo', 'x'),
+      ]),
+    /titular en otra misa/,
+  );
+});
+
+test('la validacion rechaza a un suplente repartido entre dos misas', () => {
+  assert.throws(
+    () =>
+      assertReadersBelongToSingleMass([
+        celebracion('A', '2026-09-05', 'Primera', 'p', ['x']),
+        celebracion('B', '2026-09-06', 'Primera', 'q', ['x']),
+      ]),
+    /suplente en mas de una misa|suplente en más de una misa/,
+  );
+});
+
+test('la validacion rechaza ser titular de una misa y suplente de otra', () => {
+  assert.throws(
+    () =>
+      assertReadersBelongToSingleMass([
+        celebracion('A', '2026-09-05', 'Primera', 'x'),
+        celebracion('B', '2026-09-06', 'Primera', 'q', ['x']),
+      ]),
+    /titular como suplente/,
+  );
+});
+
+test('la validacion rechaza ser titular y suplente de la MISMA misa', () => {
+  // Antes pasaba desapercibido: quien ya sirve no debe ocupar ademas la banca.
+  assert.throws(
+    () => assertReadersBelongToSingleMass([celebracion('A', '2026-09-05', 'Primera', 'x', ['x'])]),
+    /titular como suplente/,
+  );
+  // Y tambien al reves, cuando la banca aparece antes en el recorrido.
+  assert.throws(
+    () =>
+      assertReadersBelongToSingleMass([
+        celebracion('A', '2026-09-05', 'Primera', 'q', ['x']),
+        celebracion('A', '2026-09-12', 'Salmo', 'x'),
+      ]),
+    /ya es suplente/,
+  );
+});
+
+test('la validacion rechaza dos funciones de la misma persona en una celebracion', () => {
+  assert.throws(
+    () =>
+      assertReadersBelongToSingleMass([
+        celebracion('A', '2026-09-05', 'Primera', 'x'),
+        celebracion('A', '2026-09-05', 'Salmo', 'x'),
+      ]),
+    /dos funciones/,
+  );
+});
+
+test('la validacion acepta la rotacion normal de una misa a lo largo del mes', () => {
+  // La misma persona sirve las cuatro fechas de su misa, cambiando de funcion,
+  // y otras dos personas ocupan la banca de esa misma misa.
+  const plan = [
+    celebracion('A', '2026-09-05', 'Primera', 'x', ['s1', 's2']),
+    celebracion('A', '2026-09-12', 'Salmo', 'x', ['s1', 's2']),
+    celebracion('A', '2026-09-19', 'Segunda', 'x', ['s1', 's2']),
+    celebracion('A', '2026-09-26', 'Moniciones', 'x', ['s1', 's2']),
+    celebracion('B', '2026-09-06', 'Primera', 'y', ['s3']),
+  ];
+  assert.doesNotThrow(() => assertReadersBelongToSingleMass(plan));
 });

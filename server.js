@@ -487,20 +487,28 @@ function rotationRoles(roles) {
 function assertReadersBelongToSingleMass(assignments) {
   const titularMassByReader = new Map();
   const substituteMassByReader = new Map();
+  // Nadie puede ocupar dos funciones de la misma celebración.
+  const seatsTaken = new Set();
   for (const assignment of assignments) {
     if (assignment.readerId) {
+      const seat = `${assignment.massId}|${assignment.date}|${assignment.readerId}`;
+      if (seatsTaken.has(seat)) {
+        throw new Error('La planificación intentó dar dos funciones a la misma persona en una celebración');
+      }
+      seatsTaken.add(seat);
       const titularMass = titularMassByReader.get(assignment.readerId);
-      const substituteMass = substituteMassByReader.get(assignment.readerId);
-      if ((titularMass && titularMass !== assignment.massId) ||
-          (substituteMass && substituteMass !== assignment.massId)) {
+      if (titularMass && titularMass !== assignment.massId) {
         throw new Error('La planificación intentó usar un titular en otra misa');
+      }
+      // Quien es titular no puede estar en la banca, ni siquiera de su propia misa.
+      if (substituteMassByReader.has(assignment.readerId)) {
+        throw new Error('La planificación intentó usar como titular a alguien que ya es suplente');
       }
       titularMassByReader.set(assignment.readerId, assignment.massId);
     }
     for (const readerId of assignment.substituteIds || []) {
-      const titularMass = titularMassByReader.get(readerId);
-      if (titularMass && titularMass !== assignment.massId) {
-        throw new Error('La planificación intentó usar a un titular como suplente de otra misa');
+      if (titularMassByReader.has(readerId)) {
+        throw new Error('La planificación intentó usar a un titular como suplente');
       }
       const assignedMass = substituteMassByReader.get(readerId);
       if (assignedMass && assignedMass !== assignment.massId) {
@@ -764,22 +772,20 @@ async function fillUnassigned(month) {
         const reader = chooseCandidate(true) || chooseCandidate(false);
         if (!reader) continue;
 
-        const sourceCelebrations = substituteCelebrations(reader.id);
-        const sourceCelebration = sourceCelebrations.find(item =>
-          item.massId !== mass.id || (item.massId === mass.id && item.date === date));
-        if (sourceCelebration) {
+        // Al pasar a titular deja de ser suplente en todas partes, no solo en una
+        // celebración: la lista de suplentes se repite en cada fecha de la misa, y
+        // limpiar una sola lo dejaba en la banca de las demás.
+        for (const sourceCelebration of substituteCelebrations(reader.id)) {
           const sourceKey = celebrationKey(sourceCelebration.massId, sourceCelebration.date);
           const removedIndex = sourceCelebration.ids.indexOf(reader.id);
           if (removedIndex >= 0) sourceCelebration.ids.splice(removedIndex, 1);
-          const readerCelebrations = substituteCelebrationsByReader.get(reader.id);
-          readerCelebrations?.delete(sourceKey);
-          if (!readerCelebrations?.size) substituteCelebrationsByReader.delete(reader.id);
           touchedCelebrations.add(sourceKey);
           if (sourceCelebration.massId !== mass.id) {
             movedSubstitutes += 1;
             replaceMovedSubstitute(sourceCelebration, removedIndex, reader.id);
           }
         }
+        substituteCelebrationsByReader.delete(reader.id);
 
         titularMassByReader.set(reader.id, mass.id);
         generated.push({
@@ -1371,5 +1377,5 @@ module.exports = {
   server, start, body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
   publicDoc, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews,
-  massOccurrences, massesForMonth
+  massOccurrences, massesForMonth, assertReadersBelongToSingleMass
 };
