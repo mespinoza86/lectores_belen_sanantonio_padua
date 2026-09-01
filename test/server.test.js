@@ -14,6 +14,7 @@ const {
   readerPasswordMatches,
   publicDoc,
   publicAssignment,
+  massesForMonth,
   assignmentQuery,
   previousMonth,
   costaRicaDateTime,
@@ -260,4 +261,45 @@ test('las rutas administrativas exigen sesion y conservan su vista', async () =>
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test('una misa especial de otro mes no genera puestos que haya que llenar', () => {
+  const semanales = [
+    { id: 'sab16', type: 'weekly', weekday: 6, time: '16:00', roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'] },
+    { id: 'dom11', type: 'weekly', weekday: 0, time: '11:00', roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'] },
+  ];
+  // Caso real: la Misa Domingo 9am quedo activa con fecha del 30 de agosto.
+  const especialDeAgosto = {
+    id: 'esp9am', type: 'once', weekday: null, date: '2026-08-30', time: '09:00',
+    roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'],
+  };
+  const todas = [...semanales, especialDeAgosto];
+
+  // En septiembre la especial no se celebra: no debe aportar ningun puesto.
+  assert.deepEqual(
+    massesForMonth(todas, '2026-09').map(m => m.id),
+    ['sab16', 'dom11'],
+  );
+  // En agosto si se celebra y debe contar.
+  assert.deepEqual(
+    massesForMonth(todas, '2026-08').map(m => m.id),
+    ['sab16', 'dom11', 'esp9am'],
+  );
+  // Cada misa aporta 4 funciones mas 1 suplente: septiembre pide 10 puestos y
+  // agosto 15. Antes del arreglo septiembre pedia 15 e impedia generar el mes.
+  const puestos = mes => massesForMonth(todas, mes).reduce((total, m) => total + m.roles.length + 1, 0);
+  assert.equal(puestos('2026-09'), 10);
+  assert.equal(puestos('2026-08'), 15);
+});
+
+test('una misa semanal cuenta en cualquier mes y una especial solo en el suyo', () => {
+  const semanal = { id: 's', type: 'weekly', weekday: 0, time: '11:00', roles: ['Primera'] };
+  const especial = { id: 'e', type: 'once', date: '2026-12-24', time: '20:00', roles: ['Primera'] };
+  for (const mes of ['2026-09', '2026-10', '2026-11', '2026-12']) {
+    assert.ok(massesForMonth([semanal], mes).length === 1, `la semanal deberia contar en ${mes}`);
+  }
+  assert.equal(massesForMonth([especial], '2026-12').length, 1);
+  assert.equal(massesForMonth([especial], '2026-11').length, 0);
+  // Un mes sin ninguna celebracion no genera puestos en vez de fallar.
+  assert.deepEqual(massesForMonth([especial], '2027-01'), []);
 });

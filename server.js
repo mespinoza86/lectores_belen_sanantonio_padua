@@ -463,6 +463,14 @@ function massOccurrences(mass, month) {
   return dates;
 }
 
+// Una misa solo genera puestos en los meses en los que de verdad se celebra.
+// Sin este filtro, una misa especial de otro mes exige llenar sus funciones y su
+// suplente, no produce ninguna asignacion, y aborta la planificacion entera con
+// un error que culpa a la falta de lectores.
+function massesForMonth(masses, month) {
+  return masses.filter(mass => massOccurrences(mass, month).length > 0);
+}
+
 function rotationRoles(roles) {
   const normalized = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const priority = value => {
@@ -505,11 +513,12 @@ function assertReadersBelongToSingleMass(assignments) {
 
 async function randomAssignments(month) {
   if (!/^\d{4}-\d{2}$/.test(month || '')) throw new Error('Mes inválido');
-  const [masses, readers, history] = await Promise.all([
+  const [activeMasses, readers, history] = await Promise.all([
     database.collection('masses').find({ active: true }).sort({ weekday: 1, time: 1 }).toArray(),
     database.collection('readers').find({ active: true }).toArray(),
     database.collection('assignments').find({ month: { $lt: month } }).sort({ month: 1, date: 1 }).toArray()
   ]);
+  const masses = massesForMonth(activeMasses, month);
   const readerById = new Map(readers.map(reader => [reader.id, reader]));
   const roleSlots = masses.flatMap(mass => rotationRoles(mass.roles).map(role => ({
     id: `${mass.id}:${role}`, mass, role
@@ -1361,5 +1370,6 @@ process.on('SIGTERM', shutdown);
 module.exports = {
   server, start, body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
-  publicDoc, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews
+  publicDoc, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews,
+  massOccurrences, massesForMonth
 };

@@ -1286,3 +1286,13 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 
 - `Evelia Ramirez` quedó sin tilde porque ni el formulario ni la base la traían. Si el apellido correcto es `Ramírez`, debe corregirse a mano.
 - Falta generar la planificación de septiembre de 2026, que era el objetivo de todo este ordenamiento.
+
+### Corrección de los puestos exigidos por misas que no se celebran en el mes
+
+- `randomAssignments` construía la lista de puestos recorriendo **todas las misas activas**, sin comprobar si cada una tenía fechas en el mes solicitado. `massOccurrences` solo se consultaba después, al escribir los documentos.
+- Consecuencia: una misa especial de otro mes aportaba 4 funciones más 1 suplente que había que llenar, no generaba ninguna asignación, y al quedar esos puestos vacíos abortaba la planificación completa con el mensaje *"No hay suficientes lectores disponibles"*, que culpa a la falta de personas cuando el problema es otro.
+- Se agregó `massesForMonth(masses, month)` junto a `massOccurrences` y se aplicó el filtro justo después de leer las misas activas. Como `masses` se usa en cinco puntos de la función (puestos de función, puestos de suplente, mapa de planes, reparto de suplentes adicionales y bucle de generación), filtrar en el origen deja los cinco consistentes.
+- Comprobación sobre los datos reales: con la misa del 9 a. m. activa, septiembre exigía **35 puestos** con 33 lectores activos, lo que habría abortado la generación. Con el filtro exige **30**, que es lo correcto.
+- Se agregaron dos pruebas que reproducen el caso exacto de la Misa Domingo 9am y comprueban que una misa semanal cuenta en cualquier mes, que una especial cuenta solo en el suyo, y que un mes sin celebraciones devuelve una lista vacía en vez de fallar.
+- `npm test` finalizó con 20 pruebas aprobadas y 0 fallidas.
+- `fillUnassigned` no necesitaba corrección: ya deriva sus puestos de `massOccurrences`, así que una misa sin fechas en el mes no genera ninguno.
