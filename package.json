@@ -7,7 +7,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "migrate:reader-preferences": "node scripts/migrate-reader-preferences.js --apply",
-    "test": "node test/server.test.js"
+    "test": "node test/server.test.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "engines": {
     "node": ">=18"
@@ -16,5 +18,8 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.4.2",
     "mongodb": "^6.21.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
   }
 }
