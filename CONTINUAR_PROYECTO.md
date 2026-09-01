@@ -1315,3 +1315,26 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 - Por las marcas de creación, 82 de esos documentos se escribieron el 31 de agosto por la tarde y 2 el 1 de septiembre, es decir fuera de las operaciones de esta sesión. La sincronización con la encuesta no toca la colección de asignaciones.
 - La lectora **Ana** fue eliminada, no desactivada. Conviene tener presente que `DELETE /api/readers` borra **todas** sus asignaciones de todos los meses, incluido el historial pasado, mientras que desactivar lo conserva.
 - Agosto ya pasó, así que esto solo afecta al reporte histórico. Septiembre está completo y correcto: 96 asignaciones, 0 puestos vacíos, 32 de 32 lectores activos participando.
+
+### Restauración de la planificación de agosto desde el rol en Excel
+
+- El usuario había vaciado agosto a propósito porque el reparto bueno estaba en el archivo `Rol Lectores Agosto 26.xlsx`, no en la base. Lo quería repuesto para que el algoritmo conserve la memoria de quién sirvió en agosto al generar los meses siguientes.
+- Se agregó `scripts/restore-august-2026-plan.js` con los modos `--check`, `--apply` y `--verify`.
+- El `.xlsx` se lee **sin dependencias nuevas**: el formato es un zip con XML dentro, así que el script lo descomprime y resuelve `sharedStrings.xml` contra la hoja. El archivo se copió a `data/private/rol-lectores-agosto-2026.xlsx`, ignorado por Git.
+- Al escribir el lector apareció una trampa del formato: una celda vacía se guarda autocerrada (`<c r="A5" s="8"/>`), y un patrón ingenuo hacía que se comiera el valor de la celda siguiente, desplazando todas las columnas. Se resolvió distinguiendo celdas autocerradas de las que llevan `</c>`.
+- El Excel usa el mismo formato tradicional que ya genera la aplicación: seis bloques, uno por misa, con cuatro lectores en columnas y cinco fechas debajo indicando la función de cada uno ese día.
+- Validación previa: 6 misas × 4 lectores × 5 fechas, funciones únicas cada día, 24 lectores distintos y nadie repetido en dos misas.
+- Los nombres del Excel vienen en forma corta. Veintiuno casaron por palabras compartidas; tres necesitaron equivalencia explícita confirmada por el usuario: `Vicky Murillo` → María Victoria Murillo Guzmán, `Anna Bolaños` → Ana Bolaños Murillo y `Mary Alvarez` → María Álvarez Villalobos. Ninguno quedó sin correspondencia.
+- Las funciones se traducen del Excel a las de la base: `Monitor` pasa a `Moniciones`, `Primera` a `Primera lectura` y `Segunda` a `Segunda lectura`.
+- Por decisión del usuario, agosto se repone **sin suplentes** y conservando a los tres lectores hoy inactivos que sí sirvieron entonces: Kary Hernández Gonzalez, José Francisco Zumbado Arce y Andrea Sanabria.
+- También por decisión del usuario, la misa especial **Misa Domingo 9am** del 30 de agosto se elimina de la planificación: el script reemplaza el mes completo y solo repone lo que está en el Excel.
+- Antes de aplicar se creó el respaldo privado `data/private/respaldo-agosto-antes-restaurar-*.json`, y la escritura se hizo dentro de una transacción.
+- Resultado verificado: **agosto tiene 120 asignaciones**, las seis misas con 20 puestos, 5 fechas y 4 lectores cada una, y **0 huecos**.
+- Ambos meses pasan ahora la validación endurecida: agosto con 120 asignaciones y 24 personas, septiembre con 96 y 32.
+
+### Caso no contemplado: misas especiales fuera de la rotación
+
+- Al validar agosto con la misa de las 9 a. m. todavía presente, la regla de una sola misa por persona saltaba con Andrea Sanabria, Wendy Vargas y Luis Alonso Marín Rodríguez.
+- No era un error de importación: la misa de las 9 a. m. fue una celebración única y se cubrió con gente que ya servía en su horario habitual, algo perfectamente razonable que la regla mensual no contempla.
+- El caso desapareció al eliminar esa misa de agosto, pero el hueco conceptual sigue: si se crea otra misa especial, el generador la trata como una misa más y exige cuatro personas exclusivas para ella, además de restarlas del resto del mes.
+- Queda anotado en el backlog: convendría distinguir las celebraciones especiales de la rotación mensual ordinaria.
