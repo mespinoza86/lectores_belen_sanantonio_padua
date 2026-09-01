@@ -1,3 +1,15 @@
 node_modules/
 package-lock.json
 data/
+
+# Todavia sin formatear, a proposito: se hara en un commit aparte para no
+# mezclar un diff mecanico grande con cambios de comportamiento.
+# El HTML ademas necesita revision en navegador antes de reformatearlo,
+# porque el espacio en blanco entre elementos en linea si afecta al render.
+server.js
+public/
+
+# La bitacora y la hoja de estilos se dejan como estan: el .md es historico y
+# el CSS necesita revision visual antes de reformatearlo.
+CONTINUAR_PROYECTO.md
+private/styles.css

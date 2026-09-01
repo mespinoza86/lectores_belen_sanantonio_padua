@@ -1190,3 +1190,29 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - Toda la comprobación fue estática y sobre el AST. La aplicación no se ejecutó en un navegador ni contra MongoDB durante esta sesión, por lo que conviene abrir cada página una vez antes de publicar: Inicio, Lectores, Misas, Asignar, Cobertura, Reporte y Noticias, y probar el cambio de mes, que ahora recarga datos.
 - `server.js` no se formateó a propósito, para no mezclar un diff mecánico enorme con las correcciones de seguridad de esta misma sesión. `npm run format:check` lo reportará como pendiente hasta que se decida hacerlo en un commit aparte.
 - Quedan 25 líneas de más de 200 caracteres en las partes nuevas: son plantillas literales con HTML incrustado que Prettier no puede partir. Reducirlas requiere extraer esas plantillas a funciones, que es un cambio de código y no de formato.
+
+### Deduplicación del HTML: una sola plantilla para todo el planificador
+
+- Se confirmó que `index.html`, `lectores.html`, `misas.html`, `asignar.html` y `reporte.html` eran en la práctica el mismo documento: los cinco llevaban las seis secciones y los mismos diálogos.
+- La causa raíz es que **Inicio** era el único elemento del menú lateral sin `href`: un `<button data-view="dashboard">` que cambia de vista en el cliente. Por eso cada página necesitaba llevar encima la sección `dashboard`. Las demás secciones eran peso muerto, porque el resto de enlaces navegan a su propia página.
+- Comparando las cinco páginas normalizadas, las diferencias reales eran mínimas: `misas.html` y `reporte.html` se distinguían de `lectores.html` solo por el bloque del filtro por lector; `index.html` además no tenía la sección `assign`; y `asignar.html` era la más completa, con `fillUnassigned`, los dos filtros y `assignmentScopeDialog`.
+- Se encontró de paso que la corrección del 3 de agosto del botón **Ver asignaciones** se había aplicado únicamente a `index.html`. Las otras cuatro páginas conservaban el `<button data-view="assign">` anterior, que cambiaba de vista en lugar de navegar.
+- Se creó `public/app.html` como unión de las cinco: parte de `asignar.html`, incorpora el filtro por lector de `lectores.html` y adopta el enlace corregido de `index.html`, que así queda aplicado en todas.
+- El servidor resuelve las seis rutas de página contra esa plantilla mediante el mapa `PAGE_VIEWS` e inyecta `data-page` junto al `data-mode` que ya inyectaba. El desvío puntual de `/cobertura.html` a `/asignar.html` desaparece: ahora recibe directamente `data-page="coverage"`.
+- Los cinco cargadores de `private/js` eran ya idénticos entre sí tras la división de `common.js`, así que se unificaron en `private/js/app.js`.
+- Resultado: nueve archivos de página y cargador quedan en dos. `public/` contiene ahora `app.html`, `login.html`, `noticias.html` y `estadisticas.html`.
+
+### Verificación de la deduplicación
+
+- Se comprobó que `app.html` es un superconjunto estricto: ninguno de los identificadores presentes en las cinco páginas anteriores falta en la plantilla.
+- Se levantó el servidor real y se recorrieron todas las rutas. Las seis públicas responden 200 con la vista correcta y en modo público; `/adminmode.html` y `/admin/...` responden 200 en modo administrador con la vista correcta cuando hay cookie válida, y 302 a `/login.html` cuando no la hay. `login.html`, `noticias.html`, los JavaScript y la hoja de estilos siguen sirviéndose igual, y una ruta inexistente sigue devolviendo 404.
+- Se comparó, para cada una de las cinco rutas, el conjunto de identificadores, nombres de campo, `data-view` y enlaces del HTML servido ahora contra el de la página correspondiente en el commit anterior: ninguna ruta pierde ninguna marca.
+- Se agregaron dos pruebas de integración que levantan el servidor y comprueban la vista inicial de cada ruta y el control de acceso administrativo. `npm test` finalizó con 18 aprobadas y 0 fallidas.
+- Se formatearon además la suite y los scripts de `scripts/`, con AST idéntico verificado en los cinco archivos. `npm run format:check` ya pasa limpio.
+- `server.js`, `public/`, la hoja de estilos y esta bitácora quedan excluidos del formateo en `.prettierignore`, con el motivo anotado en el propio archivo. El HTML necesita revisión en navegador antes de reformatearlo porque el espacio entre elementos en línea afecta al render.
+
+### Cambios de comportamiento que conviene mirar en el navegador
+
+- En `lectores.html`, `misas.html`, `asignar.html` y `reporte.html`, el botón **Ver asignaciones** del panel ahora navega a la página de asignaciones en vez de cambiar de vista en la misma URL. Es la corrección del 3 de agosto, que antes solo estaba en Inicio.
+- Inicio ahora incluye la sección `assign` oculta, por lo que `renderAssignments()` se ejecuta también allí. No es visible, pero supone trabajo de render adicional. Si se quiere recuperar la decisión del 3 de agosto de no montar el tablero en Inicio, basta con condicionar ese render a la vista activa.
+- Las páginas que no tenían el filtro por lector ahora lo incluyen, dentro de la sección de lectores.

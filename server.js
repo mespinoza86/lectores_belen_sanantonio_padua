@@ -19,6 +19,15 @@ const SESSION_TTL = 8 * 60 * 60 * 1000;
 const PASSWORD_FAILURE_LIMIT = 10;
 const PASSWORD_BLOCK_MS = 10 * 60 * 1000;
 const APP_TIME_ZONE = 'America/Costa_Rica';
+// Todas las paginas del planificador comparten public/app.html; solo cambia la vista inicial.
+const PAGE_VIEWS = {
+  '/index.html': 'dashboard',
+  '/lectores.html': 'readers',
+  '/misas.html': 'masses',
+  '/asignar.html': 'assign',
+  '/cobertura.html': 'coverage',
+  '/reporte.html': 'report'
+};
 const loginAttempts = new Map();
 let client;
 let database;
@@ -1276,7 +1285,8 @@ function serve(req, res, url) {
   }
   if (requested === '/adminmode.html') requested = '/index.html';
   if (requested.startsWith('/admin/')) requested = requested.slice('/admin'.length);
-  if (requested === '/cobertura.html') requested = '/asignar.html';
+  const pageView = PAGE_VIEWS[requested];
+  if (pageView) requested = '/app.html';
   try { requested = decodeURIComponent(requested); } catch { res.writeHead(400, securityHeaders()); return res.end(); }
   const privateAsset = requested.startsWith('/private/');
   const root = privateAsset ? PRIVATE : PUBLIC;
@@ -1286,7 +1296,8 @@ function serve(req, res, url) {
   if (relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404, securityHeaders()); return res.end('No encontrado'); }
   const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
   if (path.extname(file) === '.html') {
-    const html = fs.readFileSync(file, 'utf8').replace(/<body([^>]*)>/, `<body$1 data-mode="${adminPage ? 'admin' : 'user'}">`);
+    const attributes = `data-mode="${adminPage ? 'admin' : 'user'}"${pageView ? ` data-page="${pageView}"` : ''}`;
+    const html = fs.readFileSync(file, 'utf8').replace(/<body([^>]*)>/, `<body$1 ${attributes}>`);
     res.writeHead(200, { ...securityHeaders(), 'Content-Type': types['.html'], 'Cache-Control': 'no-store' });
     return res.end(html);
   }

@@ -4,15 +4,29 @@ const { PassThrough } = require('node:stream');
 
 process.env.ADMIN_PASSWORD = 'test-admin-password-that-is-not-secret';
 const {
-  server, body, securityHeaders, createAdminToken, adminSession,
-  legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
-  publicDoc, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews
+  server,
+  body,
+  securityHeaders,
+  createAdminToken,
+  adminSession,
+  legacyReaderPasswordHash,
+  readerPasswordHash,
+  readerPasswordMatches,
+  publicDoc,
+  publicAssignment,
+  assignmentQuery,
+  previousMonth,
+  costaRicaDateTime,
+  validateNews,
 } = require('../server');
 
 test('la sesión administrativa firmada acepta tokens válidos y rechaza alteraciones', () => {
   const token = createAdminToken();
   assert.equal(adminSession({ headers: { cookie: `admin_session=${encodeURIComponent(token)}` } }), true);
-  assert.equal(adminSession({ headers: { cookie: `admin_session=${encodeURIComponent(`${token}x`)}` } }), false);
+  assert.equal(
+    adminSession({ headers: { cookie: `admin_session=${encodeURIComponent(`${token}x`)}` } }),
+    false,
+  );
 });
 
 test('la sesión administrativa expira después de ocho horas', () => {
@@ -30,7 +44,10 @@ test('bcrypt y los hashes heredados validan contraseñas sin exponerlas', async 
 });
 
 test('los documentos públicos ocultan hash, identificador interno y teléfono', () => {
-  assert.deepEqual(publicDoc({ _id: 'interno', id: 'lector-1', name: 'Ana', phone: '8888', passwordHash: 'hash' }, true), { id: 'lector-1', name: 'Ana' });
+  assert.deepEqual(
+    publicDoc({ _id: 'interno', id: 'lector-1', name: 'Ana', phone: '8888', passwordHash: 'hash' }, true),
+    { id: 'lector-1', name: 'Ana' },
+  );
 });
 
 test('las respuestas incluyen cabeceras defensivas', () => {
@@ -52,12 +69,46 @@ test('la fecha del servidor se expresa en la zona horaria de Costa Rica', () => 
 });
 
 test('las noticias exigen contenido y una expiración posterior al inicio', () => {
-  assert.deepEqual(validateNews({ title: 'Formación', message: 'Sábado a las 2 p. m.', startsAt: '2026-08-03T10:00', expiresAt: '2026-08-10T23:59', active: true }), {
-    title: 'Formación', message: 'Sábado a las 2 p. m.', startsAt: '2026-08-03T10:00', expiresAt: '2026-08-10T23:59', active: true
-  });
-  assert.throws(() => validateNews({ title: 'Aviso', message: 'Texto', startsAt: '2026-08-10T10:00', expiresAt: '2026-08-09T10:00' }), /posterior al inicio/);
-  assert.throws(() => validateNews({ title: '', message: 'Texto', expiresAt: '2026-08-10T10:00' }), /obligatorios/);
-  assert.throws(() => validateNews({ title: 'Aviso', message: 'Texto', startsAt: '2026-08-03T10:00', expiresAt: '2026-02-31T10:00' }), /expiración/);
+  assert.deepEqual(
+    validateNews({
+      title: 'Formación',
+      message: 'Sábado a las 2 p. m.',
+      startsAt: '2026-08-03T10:00',
+      expiresAt: '2026-08-10T23:59',
+      active: true,
+    }),
+    {
+      title: 'Formación',
+      message: 'Sábado a las 2 p. m.',
+      startsAt: '2026-08-03T10:00',
+      expiresAt: '2026-08-10T23:59',
+      active: true,
+    },
+  );
+  assert.throws(
+    () =>
+      validateNews({
+        title: 'Aviso',
+        message: 'Texto',
+        startsAt: '2026-08-10T10:00',
+        expiresAt: '2026-08-09T10:00',
+      }),
+    /posterior al inicio/,
+  );
+  assert.throws(
+    () => validateNews({ title: '', message: 'Texto', expiresAt: '2026-08-10T10:00' }),
+    /obligatorios/,
+  );
+  assert.throws(
+    () =>
+      validateNews({
+        title: 'Aviso',
+        message: 'Texto',
+        startsAt: '2026-08-03T10:00',
+        expiresAt: '2026-02-31T10:00',
+      }),
+    /expiración/,
+  );
 });
 
 test('una cabecera Host malformada responde 400 y no derriba el proceso', async () => {
@@ -67,7 +118,9 @@ test('una cabecera Host malformada responde 400 y no derriba el proceso', async 
   const statusLine = await new Promise(resolve => {
     const socket = net.connect(port, '127.0.0.1', () => socket.write('GET / HTTP/1.1\r\nHost: [\r\n\r\n'));
     let received = '';
-    socket.on('data', chunk => { received += chunk; });
+    socket.on('data', chunk => {
+      received += chunk;
+    });
     socket.on('close', () => resolve(received.split('\r\n')[0]));
   });
   await new Promise(resolve => server.close(resolve));
@@ -77,7 +130,10 @@ test('una cabecera Host malformada responde 400 y no derriba el proceso', async 
 test('una cookie con codificación inválida no interrumpe la sesión administrativa', () => {
   assert.equal(adminSession({ headers: { cookie: 'admin_session=%' } }), false);
   const token = createAdminToken();
-  assert.equal(adminSession({ headers: { cookie: `rota=%E0%A4%A; admin_session=${encodeURIComponent(token)}` } }), true);
+  assert.equal(
+    adminSession({ headers: { cookie: `rota=%E0%A4%A; admin_session=${encodeURIComponent(token)}` } }),
+    true,
+  );
 });
 
 test('un lector sin hash almacenado nunca acepta una contraseña', async () => {
@@ -116,9 +172,14 @@ test('un mes inválido no llega a la consulta de MongoDB', () => {
 
 test('el historial de confirmaciones solo se entrega al administrador', () => {
   const stored = {
-    _id: 'interno', id: 'a1', massId: 'm1', month: '2026-08', readerId: 'r1',
-    confirmationStatus: 'pending', originalReaderId: 'r9',
-    confirmationHistory: [{ readerId: 'r9', action: 'declined' }]
+    _id: 'interno',
+    id: 'a1',
+    massId: 'm1',
+    month: '2026-08',
+    readerId: 'r1',
+    confirmationStatus: 'pending',
+    originalReaderId: 'r9',
+    confirmationHistory: [{ readerId: 'r9', action: 'declined' }],
   };
   const publico = publicAssignment(stored, true);
   assert.equal(publico.confirmationHistory, undefined);
@@ -131,4 +192,72 @@ test('el historial de confirmaciones solo se entrega al administrador', () => {
   assert.equal(administrador.originalReaderId, 'r9');
   // Sanear la copia no debe alterar el documento original.
   assert.equal(stored.originalReaderId, 'r9');
+});
+
+// Las paginas del planificador comparten una sola plantilla; la vista inicial la inyecta el servidor.
+const paginaDe = async (ruta, cookie) => {
+  const http = require('node:http');
+  const { port } = server.address();
+  return new Promise(resolve => {
+    http.get({ port, path: ruta, headers: cookie ? { Cookie: cookie } : {} }, res => {
+      let cuerpo = '';
+      res.on('data', trozo => {
+        cuerpo += trozo;
+      });
+      res.on('end', () =>
+        resolve({
+          code: res.statusCode,
+          location: res.headers.location,
+          page: (cuerpo.match(/<body[^>]*data-page="([a-z]+)"/) || [, null])[1],
+          mode: (cuerpo.match(/<body[^>]*data-mode="([a-z]+)"/) || [, null])[1],
+        }),
+      );
+    });
+  });
+};
+
+test('cada ruta del planificador sirve la plantilla comun con su vista inicial', async () => {
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const esperado = {
+      '/': 'dashboard',
+      '/index.html': 'dashboard',
+      '/lectores.html': 'readers',
+      '/misas.html': 'masses',
+      '/asignar.html': 'assign',
+      '/cobertura.html': 'coverage',
+      '/reporte.html': 'report',
+    };
+    for (const [ruta, vista] of Object.entries(esperado)) {
+      const r = await paginaDe(ruta);
+      assert.equal(r.code, 200, `${ruta} deberia responder 200`);
+      assert.equal(r.page, vista, `${ruta} deberia abrir la vista ${vista}`);
+      assert.equal(r.mode, 'user', `${ruta} sin sesion deberia ser modo publico`);
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('las rutas administrativas exigen sesion y conservan su vista', async () => {
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const cookie = `admin_session=${encodeURIComponent(createAdminToken())}`;
+    const conSesion = await paginaDe('/admin/asignar.html', cookie);
+    assert.equal(conSesion.code, 200);
+    assert.equal(conSesion.page, 'assign');
+    assert.equal(conSesion.mode, 'admin');
+
+    const inicio = await paginaDe('/adminmode.html', cookie);
+    assert.equal(inicio.page, 'dashboard');
+    assert.equal(inicio.mode, 'admin');
+
+    for (const ruta of ['/adminmode.html', '/admin/asignar.html', '/estadisticas.html']) {
+      const sinSesion = await paginaDe(ruta);
+      assert.equal(sinSesion.code, 302, `${ruta} sin sesion deberia redirigir`);
+      assert.equal(sinSesion.location, '/login.html');
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 });
