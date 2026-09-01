@@ -13,7 +13,6 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_HOSTS = process.env.MONGODB_HOSTS;
 const DB_NAME = process.env.MONGODB_DB || 'lectores_parroquia';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const DEFAULT_READER_PASSWORD = '11111111';
 const TEMPORARY_PASSWORD_LENGTH = 12;
 const TEMPORARY_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 const SESSION_TTL = 8 * 60 * 60 * 1000;
@@ -132,7 +131,10 @@ function costaRicaDateTime(date = new Date()) {
 }
 function cookies(req) {
   return Object.fromEntries((req.headers.cookie || '').split(';').map(value => value.trim().split('='))
-    .filter(parts => parts.length === 2).map(([key, value]) => [key, decodeURIComponent(value)]));
+    .filter(parts => parts.length === 2).map(([key, value]) => {
+      // Una cookie con codificación inválida no debe interrumpir la petición.
+      try { return [key, decodeURIComponent(value)]; } catch { return [key, value]; }
+    }));
 }
 function sessionSignature(payload) {
   return crypto.createHmac('sha256', ADMIN_PASSWORD || '').update(payload).digest('base64url');
@@ -161,10 +163,10 @@ function passwordMatches(value) {
   const received = crypto.createHash('sha256').update(String(value || '')).digest();
   return Boolean(ADMIN_PASSWORD) && crypto.timingSafeEqual(expected, received);
 }
-function legacyReaderPasswordHash(value = DEFAULT_READER_PASSWORD) {
+function legacyReaderPasswordHash(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
-async function readerPasswordHash(value = DEFAULT_READER_PASSWORD) {
+async function readerPasswordHash(value) {
   return bcrypt.hash(String(value), 12);
 }
 function temporaryReaderPassword() {
@@ -172,7 +174,9 @@ function temporaryReaderPassword() {
     TEMPORARY_PASSWORD_ALPHABET[crypto.randomInt(TEMPORARY_PASSWORD_ALPHABET.length)]).join('');
 }
 async function readerPasswordMatches(reader, value) {
-  const stored = reader.passwordHash || legacyReaderPasswordHash();
+  // Sin hash almacenado no hay contraseña válida: nunca se acepta un valor por defecto.
+  const stored = reader?.passwordHash;
+  if (!stored) return false;
   if (stored.startsWith('$2')) return bcrypt.compare(String(value || ''), stored);
   const expected = Buffer.from(stored, 'hex');
   const received = Buffer.from(legacyReaderPasswordHash(String(value || '')), 'hex');
@@ -180,7 +184,7 @@ async function readerPasswordMatches(reader, value) {
 }
 function requireAdmin(req, res) {
   if (adminSession(req)) return true;
-  json(res, 401, { error: 'Debes iniciar sesiÃ³n como administrador' });
+  json(res, 401, { error: 'Debes iniciar sesión como administrador' });
   return false;
 }
 function validateReader(input) {
@@ -403,6 +407,29 @@ function publicDoc(document, hidePrivateReaderData = false) {
     delete value.mustChangePassword;
     delete value.passwordChangedAt;
     delete value.passwordResetAt;
+  }
+  return value;
+}
+
+// El público recibe una ventana reciente en lugar de toda la planificación histórica.
+function previousMonth(month) {
+  const [year, number] = month.split('-').map(Number);
+  return `${number === 1 ? year - 1 : year}-${String(number === 1 ? 12 : number - 1).padStart(2, '0')}`;
+}
+function assignmentQuery(url, isAdmin) {
+  const requested = [...new Set((url.searchParams.get('months') || url.searchParams.get('month') || '')
+    .split(',').map(value => value.trim()).filter(value => /^\d{4}-\d{2}$/.test(value)))].slice(0, 12);
+  if (requested.length) return { month: { $in: requested } };
+  if (isAdmin) return {};
+  const current = costaRicaDateTime().slice(0, 7);
+  return { month: { $in: [previousMonth(current), current] } };
+}
+// El historial de confirmaciones y el titular original solo se entregan al administrador.
+function publicAssignment(document, hideHistory) {
+  const value = publicDoc(document);
+  if (hideHistory) {
+    delete value.confirmationHistory;
+    delete value.originalReaderId;
   }
   return value;
 }
@@ -806,7 +833,7 @@ async function api(req, res, url) {
           attempt.count += 1;
           if (attempt.count >= 5) { attempt.count = 0; attempt.blockedUntil = Date.now() + 60_000; }
           loginAttempts.set(key, attempt);
-          return json(res, 401, { error: 'ContraseÃ±a incorrecta' });
+          return json(res, 401, { error: 'Contraseña incorrecta' });
         }
         loginAttempts.delete(key);
         const token = createAdminToken();
@@ -1140,9 +1167,11 @@ async function api(req, res, url) {
   const collection = database.collection(resource);
   try {
     if (req.method === 'GET') {
-      const values = await collection.find({}).sort({ createdAt: 1, name: 1 }).toArray();
-      const hidePrivateReaderData = resource === 'readers' && !adminSession(req);
-      return json(res, 200, values.map(value => publicDoc(value, hidePrivateReaderData)));
+      const isAdminRequest = adminSession(req);
+      const query = resource === 'assignments' ? assignmentQuery(url, isAdminRequest) : {};
+      const values = await collection.find(query).sort({ createdAt: 1, name: 1 }).toArray();
+      if (resource === 'assignments') return json(res, 200, values.map(value => publicAssignment(value, !isAdminRequest)));
+      return json(res, 200, values.map(value => publicDoc(value, resource === 'readers' && !isAdminRequest)));
     }
     if (req.method === 'POST') {
       const input = await body(req);
@@ -1266,9 +1295,21 @@ function serve(req, res, url) {
 }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  if (url.pathname.startsWith('/api/')) api(req, res, url);
-  else serve(req, res, url);
+  let url;
+  try {
+    url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  } catch {
+    // Una cabecera Host malformada no debe derribar el proceso.
+    res.writeHead(400, { ...securityHeaders(), 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' });
+    return res.end('Solicitud inválida');
+  }
+  const failed = error => {
+    console.error('Error no controlado:', error?.message || error);
+    if (res.headersSent) return res.destroy();
+    json(res, 500, { error: 'Error interno del servidor' });
+  };
+  if (url.pathname.startsWith('/api/')) api(req, res, url).catch(failed);
+  else { try { serve(req, res, url); } catch (error) { failed(error); } }
 });
 
 async function start() {
@@ -1299,6 +1340,9 @@ if (require.main === module) start().catch(error => {
   }
   process.exitCode = 1;
 });
+// Última red de seguridad: registrar el fallo y seguir sirviendo en lugar de terminar el proceso.
+process.on('uncaughtException', error => console.error('Excepción no controlada:', error));
+process.on('unhandledRejection', reason => console.error('Rechazo no controlado:', reason));
 async function shutdown() { server.close(); if (client) await client.close(); }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
@@ -1306,5 +1350,5 @@ process.on('SIGTERM', shutdown);
 module.exports = {
   server, start, body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
-  publicDoc, costaRicaDateTime, validateNews
+  publicDoc, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews
 };
