@@ -265,12 +265,28 @@ test('las rutas administrativas exigen sesion y conservan su vista', async () =>
 
 test('una misa especial de otro mes no genera puestos que haya que llenar', () => {
   const semanales = [
-    { id: 'sab16', type: 'weekly', weekday: 6, time: '16:00', roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'] },
-    { id: 'dom11', type: 'weekly', weekday: 0, time: '11:00', roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'] },
+    {
+      id: 'sab16',
+      type: 'weekly',
+      weekday: 6,
+      time: '16:00',
+      roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'],
+    },
+    {
+      id: 'dom11',
+      type: 'weekly',
+      weekday: 0,
+      time: '11:00',
+      roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'],
+    },
   ];
   // Caso real: la Misa Domingo 9am quedo activa con fecha del 30 de agosto.
   const especialDeAgosto = {
-    id: 'esp9am', type: 'once', weekday: null, date: '2026-08-30', time: '09:00',
+    id: 'esp9am',
+    type: 'once',
+    weekday: null,
+    date: '2026-08-30',
+    time: '09:00',
     roles: ['Primera', 'Segunda', 'Salmo', 'Moniciones'],
   };
   const todas = [...semanales, especialDeAgosto];
