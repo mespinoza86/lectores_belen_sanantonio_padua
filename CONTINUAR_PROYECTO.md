@@ -1238,3 +1238,51 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 - **Pruebas de integración de las reglas de asignación**: exclusividad mensual, propagación por alcance, traslado de suplentes y transacciones. Es la parte más delicada del sistema y la única sin cobertura; se rehízo tres veces según el historial.
 - **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado. El HTML necesita revisión en navegador antes, porque el espacio entre elementos en línea afecta al render.
 - **Decidir si Inicio debe montar la sección `assign` oculta.** Tras unificar la plantilla, `renderAssignments()` se ejecuta también en Inicio. No es visible, pero es trabajo de render innecesario y revierte parcialmente la decisión del 3 de agosto. Se resuelve condicionando ese render a la vista activa.
+
+## Actualización del 1 de septiembre de 2026
+
+### Sincronización de lectores con la encuesta de agosto
+
+- Se recibió una nueva encuesta con 31 respuestas y 30 personas únicas. Rosario Castillo Vásquez respondió dos veces con contenido idéntico; se conservó una sola.
+- Las seis franjas horarias del formulario coinciden exactamente con las seis misas semanales configuradas.
+- Se comparó contra los 38 lectores de la base: 26 ya existían, 4 eran nuevos y 12 no respondieron.
+- Se confirmó con el usuario que **Vicky Murillo** y **María Victoria Murillo Guzmán** son la misma persona. El emparejamiento automático no podía deducirlo porque solo comparten un apellido, así que se registró como equivalencia explícita en `KNOWN_MATCHES`.
+- Las otras diez coincidencias parciales fueron confirmadas por el usuario: Yorleni/Yorleny Solórzano, Lissete/Lissette, Rita Mora/Rita Elena Mora, Flor Maria/Flor María, Dominik Hodgson/Hodgson Medal, Gloriela Mora/Mora Pereira, María Auxiliadora Rodríguez/Rodríguez Venegas, Mauricio Cartín/Cartín Herrera, Laura Cascante/Cascante Arias y Patricia/Patricia Delgado González.
+
+### Decisiones tomadas por el usuario
+
+- **Modelo de preferencias**: el formulario solo tiene dos estados y la base tiene tres. Se acordó **SI → misa preferida**, y **NO junto con lo no mencionado → no puede asistir**. No queda ninguna misa neutral.
+- La indisponibilidad se registra únicamente sobre las seis misas semanales del formulario. Una misa creada más adelante no nace bloqueada para todo el mundo.
+- **Gelsy Yeny Rojas Storck** marcó sábado 4:00 p. m. como posible e imposible a la vez. Se aplicó el precedente del 2 de agosto con José Francisco Zumbado: gana el **no puede asistir**.
+- **Nombres**: se adopta la escritura del formulario, quitando espacios sobrantes y punto final y capitalizando palabras en minúscula, pero **conservando las tildes que la base ya tenía** cuando el formulario las perdió. Así se recuperaron `Solórzano`, `Cartín` y `Rodríguez`.
+- Por indicación expresa del usuario, `Auxiliadora Rodríguez Venegas` se guardó como **María Auxiliadora Rodríguez Venegas**.
+- La misa especial **Misa Domingo 9am** del 30 de agosto no continúa y se desactivó.
+- Se mantienen activas **Ligia Zumbado**, **Ana** y **Elvira Ortiz** aunque no respondieron. Conservan las preferencias que ya tenían, porque el formulario no aporta datos nuevos sobre ellas.
+
+### Hallazgo importante: puestos fantasma en la asignación aleatoria
+
+- `randomAssignments` construye los puestos a partir de **todas las misas activas, sin comprobar si la misa ocurre en el mes solicitado**. `massOccurrences` solo se consulta después, al generar los documentos.
+- La misa especial del 9 a. m. seguía activa con fecha del 30 de agosto. Para septiembre habría añadido 4 funciones más 1 suplente, es decir **5 puestos imposibles de llenar**, y la generación habría abortado entera sin explicar la causa.
+- Desactivarla resuelve el caso concreto, pero **el fallo sigue presente** para cualquier misa especial futura. Queda en el backlog.
+
+### Capacidad del mes, comprobada antes de aplicar
+
+- Un mes completo exige **30 personas distintas**: 6 misas × 4 funciones = 24 titulares, más al menos 1 suplente por misa. Cada persona ocupa un solo puesto al mes.
+- Con la regla elegida se simuló el emparejamiento antes de escribir nada. Con solo los 30 de la encuesta el mes salía **con margen cero**, sin ningún suplente adicional y sin tolerancia a una baja más.
+- Al conservar activas a las tres personas indicadas por el usuario, quedan **33 activos para 30 puestos**, con margen 3.
+- Disponibilidad por misa tras aplicar: sábado 4 p. m. = 14, sábado 6 p. m. = 20, domingo 7 a. m. = 10, domingo 11 a. m. = 12, domingo 4 p. m. = 12, domingo 6 p. m. = 11. El mínimo por misa es 5.
+
+### Resultado aplicado
+
+- Se agregó `scripts/sync-readers-from-survey.js` con los modos `--check`, `--apply` y `--verify`, siguiendo el patrón de los scripts anteriores.
+- Antes de escribir se creó el respaldo privado `data/private/respaldo-antes-encuesta-2026-09-01T17-40-04-940Z.json` con lectores y misas.
+- Todo se aplicó dentro de una transacción de MongoDB: 26 actualizaciones, 4 altas, 8 bajas y la desactivación de la misa especial.
+- Verificación posterior: **42 lectores en total, 33 activos, 9 inactivos**, los 42 con modelo de preferencias, 6 misas semanales activas y ninguna misa especial activa.
+- Los 4 lectores nuevos son Hannia Barrantes Solano, Elias González, Stephanie Aragón y Farid Campos. Sus contraseñas temporales quedaron solo en `data/private/credenciales-nuevos-lectores-2026-09-01T17-40-04-940Z.csv`, ignorado por Git, y deben entregarse en privado porque no vuelven a poder consultarse.
+- Las 8 personas desactivadas conservan contraseña, notas e historial. Reactivarlas es marcar la casilla de lector activo.
+- No había ninguna asignación con fecha de hoy en adelante, así que nada de esto rompió una planificación viva.
+
+### Pendiente inmediato
+
+- `Evelia Ramirez` quedó sin tilde porque ni el formulario ni la base la traían. Si el apellido correcto es `Ramírez`, debe corregirse a mano.
+- Falta generar la planificación de septiembre de 2026, que era el objetivo de todo este ordenamiento.
