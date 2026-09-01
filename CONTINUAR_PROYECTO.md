@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 16 de julio de 2026
+Última actualización: 14 de agosto de 2026
 
 ## Objetivo
 
@@ -1059,3 +1059,134 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 - El script compartido se incluyó en todas las páginas principales, Noticias, Estadísticas y Login. Los estilos generales se actualizaron en `private/styles.css`.
 - `node --check` finalizó correctamente para `private/js/password-toggle.js`, `private/js/login.js` y `private/js/common.js`; `git diff --check` no encontró errores, aparte de las advertencias conocidas de LF a CRLF.
 - `npm test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+
+## Continuidad retomada el 11 de agosto de 2026
+
+### Revisión inicial de la sesión
+
+- Se leyó completo `CONTINUAR_PROYECTO.md` para recuperar el historial funcional y técnico del proyecto.
+- Se confirmó que la última sesión documentada fue la del 4 de agosto de 2026.
+- El último trabajo implementado fue el control con icono de ojo para mostrar u ocultar contraseñas. En esa misma sesión también se agregaron la barra inferior para celulares y el filtro alfabético de lectores.
+- La principal funcionalidad diseñada pero todavía no implementada es la **sustitución acordada para una celebración específica**, mediante una solicitud con enlace de un solo uso, vencimiento, autenticación de ambas personas y trazabilidad.
+- La rama actual es `main`, está sincronizada con `origin/main` y al iniciar la revisión no tenía cambios locales pendientes.
+- El commit más reciente es `9ed19f8`, del 4 de agosto de 2026, con el mensaje `arreglando reporte de misas`.
+- Se comprobó correctamente la sintaxis de `server.js`, `private/js/common.js`, `private/js/noticias.js`, `private/js/mobile-nav.js` y `private/js/password-toggle.js`.
+- `git diff --check` no reportó errores.
+- `npm test` no pudo iniciar porque las dependencias locales no están instaladas: Node.js no encontró el paquete `dotenv`. No se modificó código ni se instalaron paquetes durante esta revisión.
+
+### Punto exacto para continuar
+
+- Antes de desarrollar otra función conviene ejecutar `npm.cmd install` y repetir `npm.cmd test` para recuperar una base verificable de 8 pruebas aprobadas.
+- Después, la prioridad funcional recomendada es implementar la sustitución acordada por fecha, porque resuelve un caso real ya definido y actualmente no cubierto por los suplentes oficiales.
+- Esa función debe diseñarse con persistencia e historial desde el inicio, sin sobrescribir al titular original, y debe validar vencimiento, contraseñas, disponibilidad y conflictos de horario en el servidor.
+- Como prioridades de seguridad para un lanzamiento siguen pendientes la rotación de la credencial de MongoDB previamente compartida, la revisión de la contraseña inicial de los lectores y la confirmación de la configuración de producción con HTTPS y `NODE_ENV=production`.
+- También sigue siendo recomendable ampliar las pruebas de integración para las rutas administrativas, asignaciones, sustituciones y transacciones de MongoDB.
+
+### Acuerdo de documentación para esta sesión
+
+- Por solicitud del usuario, todo cambio, diagnóstico, decisión y verificación realizados durante el 11 de agosto de 2026 se agregará a este documento conforme avance el trabajo.
+
+## Continuidad retomada el 14 de agosto de 2026
+
+### Revisión inicial de la sesión
+
+- Se leyó nuevamente el contenido completo de `CONTINUAR_PROYECTO.md` y se contrastó con el estado actual del repositorio.
+- No existen commits posteriores al 4 de agosto de 2026. El commit más reciente continúa siendo `9ed19f8`, con el mensaje `arreglando reporte de misas`.
+- La rama actual continúa siendo `main` y aparece sincronizada con `origin/main`.
+- El único cambio local al comenzar esta sesión era el propio `CONTINUAR_PROYECTO.md`, actualizado durante la revisión del 11 de agosto y todavía sin commit.
+- A diferencia de la revisión del 11 de agosto, la carpeta `node_modules` ya está presente y las dependencias necesarias pueden cargarse correctamente.
+- `npm.cmd test` finalizó con las 8 pruebas aprobadas y 0 fallidas.
+- `node --check` finalizó correctamente para `server.js`, `private/js/common.js` y `private/js/noticias.js`.
+- `git diff --check` no encontró errores; solamente mostró la advertencia conocida sobre una futura conversión de LF a CRLF en este documento.
+
+### Punto actual y recomendación
+
+- La base local está nuevamente verificable y no existe un fallo técnico inmediato que deba corregirse antes de desarrollar.
+- El siguiente trabajo funcional recomendado continúa siendo la **sustitución acordada para una celebración específica**, ya definida conceptualmente pero aún no implementada.
+- Conviene implementar esa funcionalidad por etapas: modelo persistente e índices; API segura para crear, consultar, aceptar, rechazar y cancelar solicitudes; validaciones de vencimiento y conflictos; interfaz del titular y del sustituto; integración con WhatsApp; y pruebas automatizadas.
+- Antes de publicarla deben mantenerse las reglas ya acordadas: enlace aleatorio de un solo uso, contraseña obligatoria de cada participante, vencimiento al iniciar la misa, historial del titular original y del sustituto, y control administrativo.
+- Si se prioriza preparación para producción en vez de una función nueva, el siguiente bloque recomendado es rotar la credencial de MongoDB, revisar la exposición pública de notas e historial, confirmar HTTPS y `NODE_ENV=production`, y ampliar las pruebas de integración.
+
+### Acuerdo de documentación para esta sesión
+
+- Por solicitud del usuario, todo cambio, diagnóstico, decisión y verificación realizados durante el 14 de agosto de 2026 se agregará a este documento conforme avance el trabajo.
+
+## Continuidad retomada el 31 de agosto de 2026
+
+### Revisión completa de código solicitada
+
+- Se leyó nuevamente `CONTINUAR_PROYECTO.md` y se revisó todo el código: `server.js`, los JavaScript de `private/js`, las páginas de `public`, los scripts de importación y la suite de pruebas.
+- Estado inicial verificado: rama `main` sincronizada con `origin/main`, commit más reciente `9ed19f8`, `npm test` con 8 pruebas aprobadas y `.env` correctamente ignorado por Git.
+
+### Hallazgo crítico: caída del proceso con una sola petición
+
+- `server.js` construía `new URL(req.url, ...)` con la cabecera `Host` sin protección. Una cabecera malformada lanzaba una excepción síncrona dentro del manejador de `request`, que Node convertía en `uncaughtException` y terminaba el proceso.
+- Se reprodujo con `GET / HTTP/1.1` y `Host: [`: el servidor respondía con `TypeError: Invalid URL` y salía con código 1.
+- Se detectó un segundo vector idéntico en `cookies()`: `decodeURIComponent` lanzaba `URIError` ante una cookie como `admin_session=%`, y esa función se invoca desde `adminSession()` en casi todas las rutas y en cada página administrativa.
+- Ambos permitían que cualquier persona con `curl` derribara la aplicación publicada de forma repetible.
+
+### Correcciones aplicadas
+
+- El manejador HTTP envuelve la construcción de la URL en `try/catch` y responde HTTP 400 con `Connection: close` ante una cabecera `Host` inválida.
+- `cookies()` ignora individualmente las cookies con codificación inválida en lugar de interrumpir la petición.
+- La llamada asíncrona `api(req, res, url)` ahora lleva `.catch()`, y `serve()` quedó dentro de `try/catch`. Ambos registran el fallo y responden HTTP 500 si todavía no se enviaron cabeceras.
+- Se agregaron `process.on('uncaughtException')` y `process.on('unhandledRejection')` como última red: registran el error y mantienen el proceso sirviendo. Se aplicaron después de corregir las causas conocidas, no en lugar de ellas.
+- Se eliminó la constante `DEFAULT_READER_PASSWORD` y los parámetros por defecto de `legacyReaderPasswordHash` y `readerPasswordHash`. `readerPasswordMatches` ahora devuelve `false` cuando el lector no tiene `passwordHash`; antes ese caso aceptaba la contraseña `11111111`, comportamiento que se comprobó ejecutando la función real.
+- Se corrigieron dos mensajes con codificación UTF-8 dañada visibles para el usuario: `Debes iniciar sesión como administrador` y el `Contraseña incorrecta` del acceso administrativo. Una búsqueda posterior confirmó que no queda mojibake en el repositorio.
+
+### Pruebas y verificación
+
+- Se agregaron tres pruebas de regresión: la cabecera `Host` malformada responde 400 sin derribar el proceso, una cookie inválida no interrumpe la sesión administrativa y un lector sin hash almacenado nunca acepta una contraseña.
+- La prueba del `Host` es de integración real: levanta el servidor exportado en un puerto libre y envía la petición cruda por socket.
+- `npm test` finalizó con 11 pruebas aprobadas y 0 fallidas.
+- `node --check` finalizó correctamente para `server.js`, todos los JavaScript de `private/js`, la suite de pruebas y los scripts de `scripts/`.
+- `git diff --check` no encontró errores; solo la advertencia conocida de conversión LF a CRLF.
+- Verificación directa contra el servidor real tras el arreglo: `Host: [` responde 400, `Cookie: admin_session=%` responde 200 y la petición normal responde 200, con el proceso vivo tras los tres intentos.
+- MongoDB no fue consultado ni modificado durante esta sesión.
+
+### Pendientes identificados y todavía sin corregir
+
+- Se revisó que `data/lectores_reales_revision.csv` está rastreado por Git y contiene nombre y horarios de disponibilidad de los 30 lectores reales. Por decisión expresa del usuario el archivo se conserva donde está y no debe moverse ni retirarse del control de versiones. No es un pendiente.
+- La credencial de MongoDB compartida en julio sigue sin rotarse.
+- El limitador del login administrativo reinicia su contador al bloquear, por lo que concede cinco intentos nuevos cada minuto, y su `Map` en memoria crece sin límite. Detrás del proxy de Render agrupa a todos los visitantes bajo una sola dirección.
+- `GET /api/assignments` continúa siendo público, sin filtro de mes y devolviendo `confirmationHistory` y `originalReaderId`. Un parámetro `?month=` resolvería la exposición y el crecimiento del payload.
+- Duplicación del HTML: las cinco páginas principales repiten las mismas secciones y diálogos; `misas.html` y `reporte.html` tienen conjuntos de identificadores idénticos. Ya causó el fallo del botón **Ver asignaciones** diagnosticado el 3 de agosto.
+- `private/js/common.js` tiene 56 KB en 364 líneas: 24 líneas superan los 500 caracteres y `renderCoverage` ocupa 2932 en una sola. Conviene pasarlo por un formateador y dividirlo en módulos antes de agregar funciones nuevas.
+- La suite cubre funciones puras; las reglas de exclusividad mensual, propagación por alcance y traslado de suplentes siguen sin pruebas.
+- Sigue pendiente la **sustitución acordada para una celebración específica**, que continúa siendo la prioridad funcional.
+
+### Filtro de asignaciones por mes y ocultamiento del historial
+
+- `GET /api/assignments` ya no devuelve siempre la colección completa. Acepta `?months=2026-08,2026-09` o `?month=2026-08`, valida cada valor contra `^\d{4}-\d{2}$` y descarta el resto, con un tope de doce meses por consulta.
+- Sin parámetros, el administrador sigue recibiendo todo el historial, que es lo que necesita la vista de Estadísticas. El público recibe únicamente el mes actual de Costa Rica y el anterior.
+- Un valor inválido, incluido un intento de inyectar un operador de MongoDB como `{"$ne":null}`, nunca llega a la consulta: cae en la ventana por defecto.
+- Se agregó `publicAssignment`, que elimina `confirmationHistory` y `originalReaderId` de las respuestas al público. `confirmationStatus` sigue siendo público porque la interfaz lo muestra. El saneado trabaja sobre una copia y no altera el documento original.
+- `estadisticas.js` es el único cliente que usa `confirmationHistory` y es una página administrativa, por lo que no se ve afectado.
+- En el cliente se agregó `neededMonths()`, que pide solo el mes seleccionado y el actual con sus vecinos: como máximo seis meses. Cubre la semana en curso y los reportes pendientes de los últimos siete días cuando cruzan el cambio de mes.
+- Cambiar el mes en el selector ahora ejecuta `load()` en vez de solo `render()`, porque los datos del mes nuevo ya no vienen en la carga inicial.
+- Se comprobó el cruce de año en ambos sentidos: enero pide diciembre del año anterior y diciembre pide enero del siguiente.
+- Se agregaron cinco pruebas del filtro y del saneado. `npm test` finalizó con 16 aprobadas y 0 fallidas.
+
+### Formateo y división de `private/js/common.js`
+
+- Se agregó Prettier como dependencia de desarrollo, con `.prettierrc` (ancho 110, comillas simples, CRLF) y `.prettierignore`. Se añadieron los comandos `npm run format` y `npm run format:check`.
+- Se formatearon todos los JavaScript de `private/js`. `common.js` pasó de 364 líneas con 24 de más de 500 caracteres a 1502 líneas legibles. La línea más larga bajó de 2932 a 1558 caracteres.
+- El archivo se dividió en seis partes que se cargan en este orden obligatorio: `common-base.js`, `common-datos.js`, `common-vistas.js`, `common-reporte-tradicional.js`, `common-ui.js` y `common-eventos.js`.
+- Se mantienen como scripts clásicos, no como módulos ES, para conservar el ámbito léxico compartido y no cambiar la semántica. Los cinco cargadores por página (`index.js`, `lectores.js`, `misas.js`, `asignar.js`, `reporte.js`) escriben las seis etiquetas en orden y `common.js` fue retirado.
+- El corte se hizo únicamente en fronteras de sentencia de nivel superior, arrastrando los comentarios que preceden a cada bloque.
+
+### Verificación de que el formateo y la división no cambiaron el código
+
+- Se comparó el AST del `common.js` original con el de la concatenación de las seis partes finales, podando posiciones y metadatos: **AST idéntico**.
+- Se comprobó además que la concatenación de las seis partes era byte a byte idéntica al `common.js` formateado.
+- Se verificó automáticamente el orden de carga: ninguna sentencia que se ejecuta al cargar referencia un identificador declarado en un archivo posterior. Esto importa porque el *hoisting* de funciones no cruza entre scripts clásicos separados. Casi todo lo ejecutable son registros de `addEventListener`, cuyos cuerpos corren mucho después de cargar las seis partes.
+- Se comprobó también el AST de `estadisticas.js`, `noticias.js`, `login.js`, `mobile-nav.js` y `password-toggle.js` contra su versión en Git: idénticos en los cinco.
+- Durante el proceso se detectaron y corrigieron dos errores propios del utilitario de división: Prettier devuelve posiciones sobre el texto normalizado a LF, lo que al cortar sobre el texto CRLF partía una función por la mitad; y la poda inicial del AST no excluía los campos posicionales con prefijo `__`, que producían un falso negativo en la comparación.
+- `node --check` finalizó correctamente para `server.js`, las seis partes nuevas, el resto de `private/js`, la suite y los scripts de `scripts/`.
+- `npm test` finalizó con 16 pruebas aprobadas y 0 fallidas.
+
+### Limitaciones de esta verificación
+
+- Toda la comprobación fue estática y sobre el AST. La aplicación no se ejecutó en un navegador ni contra MongoDB durante esta sesión, por lo que conviene abrir cada página una vez antes de publicar: Inicio, Lectores, Misas, Asignar, Cobertura, Reporte y Noticias, y probar el cambio de mes, que ahora recarga datos.
+- `server.js` no se formateó a propósito, para no mezclar un diff mecánico enorme con las correcciones de seguridad de esta misma sesión. `npm run format:check` lo reportará como pendiente hasta que se decida hacerlo en un commit aparte.
+- Quedan 25 líneas de más de 200 caracteres en las partes nuevas: son plantillas literales con HTML incrustado que Prettier no puede partir. Reducirlas requiere extraer esas plantillas a funciones, que es un cambio de código y no de formato.
