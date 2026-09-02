@@ -18,6 +18,10 @@ const TEMPORARY_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrst
 const SESSION_TTL = 8 * 60 * 60 * 1000;
 const PASSWORD_FAILURE_LIMIT = 10;
 const PASSWORD_BLOCK_MS = 10 * 60 * 1000;
+const ADMIN_LOGIN_FAILURE_LIMIT = 5;
+const ADMIN_LOGIN_BLOCK_BASE_MS = 60 * 1000;
+const ADMIN_LOGIN_BLOCK_MAX_MS = 15 * 60 * 1000;
+const ADMIN_LOGIN_ESCALATION_RESET_MS = 60 * 60 * 1000;
 const APP_TIME_ZONE = 'America/Costa_Rica';
 // Todas las paginas del planificador comparten public/app.html; solo cambia la vista inicial.
 const PAGE_VIEWS = {
@@ -28,7 +32,6 @@ const PAGE_VIEWS = {
   '/cobertura.html': 'coverage',
   '/reporte.html': 'report'
 };
-const loginAttempts = new Map();
 let client;
 let database;
 
@@ -94,6 +97,71 @@ async function registerPasswordFailure(action, targetId) {
 }
 async function clearPasswordFailures(action, targetId) {
   await database.collection('auth_rate_limits').deleteOne({ action, targetId });
+}
+// El acceso administrativo se limita por cuenta y no por direccion IP, igual que se
+// decidio para los lectores. Detras del proxy de Render todas las visitas comparten
+// una sola direccion, asi que limitar por IP bloqueaba a cualquiera con los fallos
+// de cualquier otro. Cada bloqueo dura mas que el anterior para que un ataque por
+// fuerza bruta deje de ser viable, con un tope para no dejar fuera al administrador
+// legitimo mas de un rato, y la escalada se reinicia sola tras una hora sin fallos.
+function adminLoginBlockMs(blocks) {
+  return Math.min(ADMIN_LOGIN_BLOCK_BASE_MS * 2 ** Math.max(0, blocks - 1), ADMIN_LOGIN_BLOCK_MAX_MS);
+}
+function adminLoginBlockedError(blockedUntil) {
+  const seconds = Math.max(1, Math.ceil((blockedUntil.getTime() - Date.now()) / 1000));
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  const error = new Error(`Demasiados intentos. Espera ${minutes} minuto${minutes === 1 ? '' : 's'}.`);
+  error.statusCode = 429;
+  error.retryAfter = seconds;
+  return error;
+}
+function adminLoginFilter() {
+  return { action: 'admin-login', targetId: 'admin' };
+}
+async function ensureAdminLoginAllowed() {
+  const attempt = await database.collection('auth_rate_limits').findOne(adminLoginFilter());
+  if (attempt?.blockedUntil && attempt.blockedUntil > new Date()) {
+    throw adminLoginBlockedError(attempt.blockedUntil);
+  }
+}
+async function registerAdminLoginFailure() {
+  const collection = database.collection('auth_rate_limits');
+  const now = new Date();
+  const filter = adminLoginFilter();
+  // Un bloqueo ya vencido deja de contar sus fallos.
+  await collection.updateOne(
+    { ...filter, blockedUntil: { $lte: now } },
+    { $set: { failures: 0 }, $unset: { blockedUntil: '' } }
+  );
+  // Tras una hora sin fallos la escalada vuelve al principio.
+  await collection.updateOne(
+    { ...filter, lastFailedAt: { $lte: new Date(now.getTime() - ADMIN_LOGIN_ESCALATION_RESET_MS) } },
+    { $set: { failures: 0, blocks: 0 }, $unset: { blockedUntil: '' } }
+  );
+  const attempt = await collection.findOneAndUpdate(
+    filter,
+    {
+      $inc: { failures: 1 },
+      $set: { lastFailedAt: now, expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
+      $setOnInsert: { createdAt: now, blocks: 0 }
+    },
+    { upsert: true, returnDocument: 'after' }
+  );
+  if (attempt.failures < ADMIN_LOGIN_FAILURE_LIMIT) return;
+  const blocks = (attempt.blocks || 0) + 1;
+  const blockedUntil = new Date(now.getTime() + adminLoginBlockMs(blocks));
+  await collection.updateOne(filter, {
+    $set: {
+      failures: 0,
+      blocks,
+      blockedUntil,
+      expiresAt: new Date(blockedUntil.getTime() + 24 * 60 * 60 * 1000)
+    }
+  });
+  throw adminLoginBlockedError(blockedUntil);
+}
+async function clearAdminLoginFailures() {
+  await database.collection('auth_rate_limits').deleteOne(adminLoginFilter());
 }
 function passwordRouteError(res, error) {
   if (error.statusCode === 429) {
@@ -856,22 +924,18 @@ async function api(req, res, url) {
   if (resource === 'auth') {
     if (id === 'status' && req.method === 'GET') return json(res, 200, { authenticated: adminSession(req) });
     if (id === 'login' && req.method === 'POST') {
-      const key = req.socket.remoteAddress || 'local';
-      const attempt = loginAttempts.get(key) || { count: 0, blockedUntil: 0 };
-      if (attempt.blockedUntil > Date.now()) return json(res, 429, { error: 'Demasiados intentos. Espera un minuto.' });
       try {
+        await ensureAdminLoginAllowed();
         const input = await body(req);
         if (!passwordMatches(input.password)) {
-          attempt.count += 1;
-          if (attempt.count >= 5) { attempt.count = 0; attempt.blockedUntil = Date.now() + 60_000; }
-          loginAttempts.set(key, attempt);
+          await registerAdminLoginFailure();
           return json(res, 401, { error: 'Contraseña incorrecta' });
         }
-        loginAttempts.delete(key);
+        await clearAdminLoginFailures();
         const token = createAdminToken();
         setSessionCookie(res, token);
         return json(res, 200, { ok: true });
-      } catch (error) { return json(res, 400, { error: error.message }); }
+      } catch (error) { return passwordRouteError(res, error); }
     }
     if (id === 'logout' && req.method === 'POST') {
       setSessionCookie(res, '', 0);
@@ -1385,6 +1449,6 @@ process.on('SIGTERM', shutdown);
 module.exports = {
   server, start, body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
-  publicDoc, publicReader, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews,
+  adminLoginBlockMs, publicDoc, publicReader, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews,
   massOccurrences, massesForMonth, assertReadersBelongToSingleMass
 };

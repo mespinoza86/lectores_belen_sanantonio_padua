@@ -1446,3 +1446,30 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 - Durante la prueba se detectó de paso que un `script` en línea queda bloqueado por `script-src 'self'`; la página de prueba se rehízo con un archivo externo, igual que hace la aplicación real. Ambos archivos temporales se eliminaron al terminar.
 - `npm test` finalizó con 27 pruebas aprobadas y 0 fallidas. `npm run format:check` pasa limpio y `node --check` finalizó bien en `server.js` y en todos los JavaScript.
 - Archivos tocados: `private/js/common-reporte-tradicional.js` y `private/styles.css`.
+
+### Limitador del acceso administrativo, rehecho
+
+Era uno de los pendientes de seguridad del backlog. El limitador anterior vivía en un `Map` en memoria y tenía tres fallos:
+
+- **Reiniciaba el contador al bloquear.** `if (attempt.count >= 5) { attempt.count = 0; ... }` dejaba cinco intentos nuevos cada minuto, de forma indefinida: 300 por hora, para siempre, sin que el bloqueo se endureciera nunca.
+- **Usaba `req.socket.remoteAddress`**, que detrás del proxy de Render es la dirección del proxy y no la del visitante. Cinco fallos de cualquier persona bloqueaban el acceso administrativo a todo el mundo.
+- **Se perdía al reiniciar**, no se compartía entre instancias y el `Map` crecía sin límite.
+
+Ahora usa la colección `auth_rate_limits` de MongoDB, la misma que ya usaban los lectores desde el 29 de julio, con la acción `admin-login`. Persiste entre reinicios, se comparte entre instancias y el índice TTL existente limpia lo viejo.
+
+- **Se limita por cuenta, no por dirección IP**, igual que se decidió para los lectores. Con eso el problema del proxy de Render desaparece por completo.
+- **Cada bloqueo dura más que el anterior**: 1, 2, 4, 8 y 15 minutos, con tope en 15. El primero mantiene el minuto de siempre para no castigar a quien simplemente se equivocó al escribir. El tope existe para no dejar fuera al administrador legítimo durante horas.
+- **La escalada se reinicia sola tras una hora sin fallos**, de modo que un incidente viejo no sigue castigando.
+- Un acceso correcto borra el registro y deja el contador en cero.
+- El ritmo que concede a un ataque por fuerza bruta baja de **300 intentos por hora a 20**.
+- Contrapartida asumida, la misma que ya se aceptó para los lectores: al limitar por cuenta y no por dirección, alguien que ataque de forma sostenida puede mantener bloqueado el acceso administrativo. Con el limitador anterior eso ya era posible, y más fácil, porque bastaban cinco fallos para bloquear a todos. El tope de 15 minutos y el reinicio por inactividad acotan el daño.
+
+#### Verificación
+
+- Se agregó una prueba de la escalada sobre la función pura `adminLoginBlockMs`. `npm test` finalizó con **28 pruebas aprobadas y 0 fallidas**.
+- Prueba real contra el servidor y MongoDB: cuatro contraseñas incorrectas devuelven 401; la quinta devuelve **429 con `Retry-After: 60`** y el mensaje *Espera 1 minuto*. Durante el bloqueo, **la contraseña correcta también recibe 429**, que es lo esperado.
+- Escalada comprobada adelantando el vencimiento del bloqueo en la base: la segunda tanda da *Espera 2 minutos* con `blocks=2` y la tercera *Espera 4 minutos* con `blocks=3`.
+- Reinicio por inactividad comprobado: con `blocks=5` pero el último fallo dos horas antes, la siguiente tanda vuelve a bloquear **un minuto** y deja `blocks=1`, no quince.
+- Acceso correcto con el bloqueo vencido: **200** y el registro queda eliminado.
+- La colección `auth_rate_limits` quedó vacía al terminar; no se dejó ningún bloqueo puesto ni scripts temporales en el repositorio.
+- Archivos tocados: `server.js` y `test/server.test.js`.

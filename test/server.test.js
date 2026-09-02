@@ -14,6 +14,7 @@ const {
   readerPasswordMatches,
   publicDoc,
   publicReader,
+  adminLoginBlockMs,
   publicAssignment,
   massesForMonth,
   assertReadersBelongToSingleMass,
@@ -73,6 +74,26 @@ test('el público solo recibe el nombre de un lector inactivo', () => {
   assert.equal(publico.phone, undefined);
   assert.equal(publico.passwordHash, undefined);
   assert.equal(publico._id, undefined);
+});
+
+test('el bloqueo del acceso administrativo crece con cada tanda de fallos', () => {
+  const minuto = 60 * 1000;
+  // El primer bloqueo mantiene el minuto de siempre, para no castigar al
+  // administrador que simplemente se equivoco al escribir.
+  assert.equal(adminLoginBlockMs(1), minuto);
+  assert.equal(adminLoginBlockMs(2), 2 * minuto);
+  assert.equal(adminLoginBlockMs(3), 4 * minuto);
+  assert.equal(adminLoginBlockMs(4), 8 * minuto);
+  // A partir de aqui se topa en 15 minutos y ya no sigue creciendo: el ataque por
+  // fuerza bruta queda frenado sin dejar al administrador fuera durante horas.
+  assert.equal(adminLoginBlockMs(5), 15 * minuto);
+  assert.equal(adminLoginBlockMs(50), 15 * minuto);
+  // El limitador anterior reiniciaba el contador al bloquear, asi que concedia cinco
+  // intentos nuevos cada minuto de forma indefinida: 300 por hora, para siempre.
+  const intentosPorHoraAntes = (60 / 1) * 5;
+  const intentosPorHoraAhora = (60 / 15) * 5;
+  assert.equal(intentosPorHoraAntes, 300);
+  assert.equal(intentosPorHoraAhora, 20);
 });
 
 test('las respuestas incluyen cabeceras defensivas', () => {
