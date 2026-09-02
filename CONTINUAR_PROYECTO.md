@@ -1219,6 +1219,8 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 
 ## Backlog al 31 de agosto de 2026
 
+> **Superado.** Este backlog quedó en medio del documento al seguir creciendo la bitácora. El vigente está al final, en *Backlog al 1 de septiembre de 2026*. Se conserva como historial.
+
 Lista viva de lo que queda pendiente. Está al final del documento a propósito, para no tener que leer toda la bitácora histórica y poder responder de un vistazo en qué punto está el proyecto.
 
 ### Aplazado por decisión del usuario
@@ -1473,3 +1475,61 @@ Ahora usa la colección `auth_rate_limits` de MongoDB, la misma que ya usaban lo
 - Acceso correcto con el bloqueo vencido: **200** y el registro queda eliminado.
 - La colección `auth_rate_limits` quedó vacía al terminar; no se dejó ningún bloqueo puesto ni scripts temporales en el repositorio.
 - Archivos tocados: `server.js` y `test/server.test.js`.
+
+## Cierre de la sesión del 1 de septiembre de 2026
+
+### Lo que se hizo hoy
+
+Cinco commits, todos en `origin/main` y desplegados en Render:
+
+| Commit | Qué resolvió |
+| --- | --- |
+| `aa3dda2` | Directorio administrativo de lectores; los inactivos dejan de ser públicos |
+| `e17666b` | El directorio pasa a tres acordeones cerrados |
+| `227e7a0` | El formato tradicional se dibuja una sola vez en SVG |
+| `a3ee094` | La imagen ya no la bloquea la CSP; el PDF pasa a una sola página |
+| `cf53d26` | Limitador del acceso administrativo, rehecho sobre MongoDB |
+
+Cada uno tiene su sección propia más arriba, con el diagnóstico y la verificación.
+
+### Estado verificado al cerrar
+
+- Rama `main` sincronizada con `origin/main`, árbol de trabajo limpio.
+- `npm test`: **28 pruebas aprobadas, 0 fallidas**. `npm run format:check` limpio. `node --check` correcto en `server.js` y en todos los JavaScript.
+- MongoDB: **41 lectores (32 activos, 9 inactivos)**, 6 misas semanales activas y ninguna especial.
+- Planificación cargada: **agosto 120 asignaciones, septiembre 96, octubre 104**.
+- `auth_rate_limits` quedó vacía: no hay ningún bloqueo puesto.
+- Quedó un proceso local de `node server.js` escuchando en el puerto 3000 durante la sesión. Si molesta, se cierra sin consecuencias.
+
+### Dos lecciones de esta sesión, para no repetirlas
+
+- **Verificar con la CSP puesta.** El fallo de la imagen no apareció en las pruebas porque se hicieron sobre páginas `file://`, que no llevan cabecera de seguridad. Cualquier prueba de algo que cargue recursos en el navegador debe hacerse contra el servidor real. De paso: un `script` en línea también queda bloqueado por `script-src 'self'`.
+- **Una funcionalidad, una maquetación.** El bug de los nombres corridos sobrevivió meses porque el formato tradicional estaba dibujado dos veces, en lienzo y en HTML, y el fallo vivía solo en una. Al unificarlo en SVG el error dejó de ser posible por construcción.
+
+## Backlog al 1 de septiembre de 2026
+
+Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
+
+### Seguridad, antes de considerarlo listo para producción
+
+- **Rotar la credencial de MongoDB** compartida en julio y actualizarla en `.env` y en las variables de entorno de Render. **Solo puede hacerlo el usuario**, desde Atlas. Es el pendiente más antiguo y el de mayor riesgo.
+- **Confirmar `NODE_ENV=production` y HTTPS** en el alojamiento. De eso dependen el atributo `Secure` de la cookie y la cabecera HSTS.
+- **Decidir si las notas de los lectores siguen siendo públicas.** Pendiente desde julio. Los lectores inactivos ya dejaron de serlo el 1 de septiembre.
+- *Resuelto el 1 de septiembre:* el limitador del acceso administrativo.
+
+### Funcionalidad aplazada
+
+- **Sustitución acordada para una celebración específica.** Diseñada el 4 de agosto, sin implementar; el usuario decidió el 31 de agosto dejarla en el backlog. El diseño completo está en la sección *Propuesta pendiente: sustitución acordada para una celebración específica*.
+- **Misas especiales fuera de la rotación.** El generador trata una celebración única como una misa más y exige cuatro personas exclusivas para ella, restándolas del resto del mes. Apareció con la Misa Domingo 9am de agosto.
+
+### Calidad
+
+- **Pruebas de integración de las reglas de asignación**: exclusividad mensual, propagación por alcance, traslado de suplentes y transacciones. Es la parte más delicada del sistema y la única sin cobertura; según el historial se rehízo tres veces.
+- **Retirar el CSS muerto del formato tradicional.** `traditional-mass`, `traditional-column` y `traditional-reserves` quedaron sin uso al pasar la vista previa a SVG. Cuidado: el bloque que los contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí hace falta. La hoja está minificada y merece una revisión visual aparte.
+- **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado.
+- **Decidir si Inicio debe montar la sección `assign` oculta.** Tras unificar la plantilla, `renderAssignments()` se ejecuta también en Inicio; no es visible, pero es trabajo de render innecesario.
+- **`Evelia Ramirez` sin tilde.** Ni el formulario ni la base la traían. Si el apellido correcto es `Ramírez`, hay que corregirlo a mano.
+
+### Decisión abierta
+
+- **Tamaño de letra del PDF tradicional.** Al caber el mes completo en una hoja, el texto se imprime a unos 6 pt. Si resulta pequeño en papel, se vuelve a dos hojas horizontales con letra casi del doble: es cambiar `pageWidthMm` y `pageHeightMm` y volver a repartir por altura, algo que ya estuvo implementado y está descrito en la sección del SVG.
