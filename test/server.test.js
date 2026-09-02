@@ -13,6 +13,7 @@ const {
   readerPasswordHash,
   readerPasswordMatches,
   publicDoc,
+  publicReader,
   publicAssignment,
   massesForMonth,
   assertReadersBelongToSingleMass,
@@ -50,6 +51,28 @@ test('los documentos públicos ocultan hash, identificador interno y teléfono',
     publicDoc({ _id: 'interno', id: 'lector-1', name: 'Ana', phone: '8888', passwordHash: 'hash' }, true),
     { id: 'lector-1', name: 'Ana' },
   );
+});
+
+test('el público solo recibe el nombre de un lector inactivo', () => {
+  const inactivo = {
+    _id: 'interno',
+    id: 'lector-2',
+    name: 'Ana',
+    active: false,
+    phone: '8888',
+    notes: 'Se retiró en agosto',
+    passwordHash: 'hash',
+    preferredMassIds: ['misa-1'],
+    unavailableMassIds: ['misa-2'],
+  };
+  assert.deepEqual(publicReader(inactivo), { id: 'lector-2', name: 'Ana', active: false });
+  const activo = { ...inactivo, id: 'lector-3', active: true };
+  const publico = publicReader(activo);
+  assert.equal(publico.notes, 'Se retiró en agosto');
+  assert.deepEqual(publico.preferredMassIds, ['misa-1']);
+  assert.equal(publico.phone, undefined);
+  assert.equal(publico.passwordHash, undefined);
+  assert.equal(publico._id, undefined);
 });
 
 test('las respuestas incluyen cabeceras defensivas', () => {

@@ -206,11 +206,12 @@ function adminReplacementSelect(assignmentId, massId, role, date) {
 function renderReaders() {
   const filterSelect = $('#readerListFilter'),
     clearFilter = $('#clearReaderListFilter');
-  if (readerListFilter && !state.readers.some(reader => reader.id === readerListFilter))
+  // Los lectores inactivos son información administrativa: en modo público no se listan.
+  const sortedReaders = state.readers
+    .filter(reader => isAdmin || reader.active)
+    .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  if (readerListFilter && !sortedReaders.some(reader => reader.id === readerListFilter))
     readerListFilter = '';
-  const sortedReaders = [...state.readers].sort((a, b) =>
-    a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),
-  );
   if (filterSelect)
     filterSelect.innerHTML = `<option value="">— Todos los lectores —</option>${sortedReaders.map(reader => `<option value="${esc(reader.id)}" ${reader.id === readerListFilter ? 'selected' : ''}>${esc(reader.name)}</option>`).join('')}`;
   if (clearFilter) clearFilter.disabled = !readerListFilter;

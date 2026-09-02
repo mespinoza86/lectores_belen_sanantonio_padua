@@ -26,9 +26,14 @@
   <main>
     <header><button id="menuBtn" class="icon-btn menu">☰</button><div><p class="eyebrow">ADMINISTRACIÓN</p><h1>Estadísticas de disponibilidad</h1></div></header>
     <section>
-      <div class="section-head"><div><p class="eyebrow">COBERTURA POR HORARIO</p><h2>Disponibilidad para servir</h2><p>Compara cuántas personas están disponibles con los puestos mínimos de cada misa.</p></div></div>
-      <div id="availabilitySummary" class="stats availability-summary"></div>
-      <div id="availabilityGrid" class="availability-grid"><article class="card"><p>Cargando estadísticas…</p></article></div>
+      <div class="section-head reader-directory-head"><div><p class="eyebrow">EQUIPO DE LECTORES</p><h2>Directorio de lectores</h2><p>Quiénes están activos, quiénes solo suplen y quiénes están inactivos, con la participación de cada persona durante el mes.</p></div><label class="statistics-month-picker">Participación de<input id="directoryMonth" type="month"></label></div>
+      <div id="readerDirectorySummary" class="stats availability-summary"></div>
+      <div id="readerDirectory" class="coverage-groups reader-directory"><article class="card"><p>Cargando lectores…</p></article></div>
+      <div class="reader-statistics-section">
+        <div class="section-head"><div><p class="eyebrow">COBERTURA POR HORARIO</p><h2>Disponibilidad para servir</h2><p>Compara cuántas personas están disponibles con los puestos mínimos de cada misa.</p></div></div>
+        <div id="availabilitySummary" class="stats availability-summary"></div>
+        <div id="availabilityGrid" class="availability-grid"><article class="card"><p>Cargando estadísticas…</p></article></div>
+      </div>
       <div class="reader-statistics-section">
         <div class="section-head"><div><p class="eyebrow">RESPUESTAS DE LOS LECTORES</p><h2>Confirmaciones por lector</h2><p>Consulta quién confirmó y quién avisó que no asistiría durante un mes.</p></div><label class="statistics-month-picker">Mes<input id="statisticsMonth" type="month"></label></div>
         <div id="readerConfirmationSummary" class="stats availability-summary"></div>

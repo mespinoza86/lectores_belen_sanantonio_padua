@@ -420,6 +420,14 @@ function publicDoc(document, hidePrivateReaderData = false) {
   return value;
 }
 
+// Los lectores inactivos son información administrativa. Al público solo le llega su
+// nombre, que sigue haciendo falta para leer la planificación de meses anteriores.
+function publicReader(document) {
+  const value = publicDoc(document, true);
+  if (!value || value.active) return value;
+  return { id: value.id, name: value.name, active: false };
+}
+
 // El público recibe una ventana reciente en lugar de toda la planificación histórica.
 function previousMonth(month) {
   const [year, number] = month.split('-').map(Number);
@@ -1195,7 +1203,8 @@ async function api(req, res, url) {
       const query = resource === 'assignments' ? assignmentQuery(url, isAdminRequest) : {};
       const values = await collection.find(query).sort({ createdAt: 1, name: 1 }).toArray();
       if (resource === 'assignments') return json(res, 200, values.map(value => publicAssignment(value, !isAdminRequest)));
-      return json(res, 200, values.map(value => publicDoc(value, resource === 'readers' && !isAdminRequest)));
+      if (resource === 'readers' && !isAdminRequest) return json(res, 200, values.map(publicReader));
+      return json(res, 200, values.map(value => publicDoc(value)));
     }
     if (req.method === 'POST') {
       const input = await body(req);
@@ -1376,6 +1385,6 @@ process.on('SIGTERM', shutdown);
 module.exports = {
   server, start, body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
-  publicDoc, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews,
+  publicDoc, publicReader, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews,
   massOccurrences, massesForMonth, assertReadersBelongToSingleMass
 };

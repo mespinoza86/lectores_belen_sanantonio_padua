@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 14 de agosto de 2026
+Última actualización: 1 de septiembre de 2026
 
 ## Objetivo
 
@@ -1338,3 +1338,44 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 - No era un error de importación: la misa de las 9 a. m. fue una celebración única y se cubrió con gente que ya servía en su horario habitual, algo perfectamente razonable que la regla mensual no contempla.
 - El caso desapareció al eliminar esa misa de agosto, pero el hueco conceptual sigue: si se crea otra misa especial, el generador la trata como una misa más y exige cuatro personas exclusivas para ella, además de restarlas del resto del mes.
 - Queda anotado en el backlog: convendría distinguir las celebraciones especiales de la rotación mensual ordinaria.
+
+### Directorio administrativo de lectores y ocultamiento de los inactivos
+
+- El administrador no tenía dónde ver **quiénes** son los lectores activos y quiénes los inactivos. Las Estadísticas solo contaban activos y nunca mostraban nombres; la página de Lectores mezclaba a las 41 personas en orden alfabético, distinguidas únicamente por una etiqueta pequeña, y el resumen administrativo daba tres números sin nombres.
+- Se agregó a `public/estadisticas.html` la sección **Directorio de lectores**, colocada antes de la cobertura por horario. Es la primera de las tres secciones de esa página, que quedó ordenada como Directorio, Cobertura por horario y Confirmaciones por lector.
+- El directorio agrupa a las personas en **Activos normales**, **Solo suplentes** e **Inactivos**, cada grupo con su recuento y su lista alfabética en español.
+- Cada persona muestra su participación durante el mes consultado: **Titular · nombre de la misa**, **Suplente · nombre de la misa** o **Sin asignación este mes**. También aparecen su teléfono cuando existe, sus misas preferidas y la marca **Cambio de contraseña pendiente**.
+- Un lector inactivo que sí figura en la planificación del mes consultado lo dice explícitamente, en lugar de afirmar que no entra en ninguna planificación. Es el caso de agosto, donde sirvieron tres personas que hoy están inactivas.
+- El resumen superior tiene cuatro indicadores: activos normales, solo suplentes, inactivos y **activos sin asignación en el mes**, que responde de un vistazo a quién está disponible y sin usar.
+- La sección tiene su propio selector de mes, iniciado con el mes actual de Costa Rica e independiente del selector de confirmaciones, para poder revisar un mes sin perder el otro.
+- Es solo lectura por decisión del usuario. Activar, desactivar y editar continúa haciéndose desde la página de Lectores.
+- No hizo falta ninguna ruta nueva ni cambio en MongoDB: `estadisticas.html` ya está protegida en el servidor por la sesión administrativa y ya cargaba `/api/readers`, `/api/masses` y `/api/assignments` con esa sesión, así que los inactivos ya venían en la respuesta.
+- Se reutilizaron las clases visuales de la vista de Cobertura (`coverage-group`, `coverage-reader-list`, `coverage-badge`) en lugar de duplicar diseño. Solo se agregaron la variante `coverage-badge.idle` y el ajuste responsivo del encabezado.
+
+### Los lectores inactivos dejaron de ser públicos
+
+- Hasta ahora `GET /api/readers` devolvía a todo el mundo los 41 lectores completos, inactivos incluidos con sus notas y preferencias, y `/lectores.html` los listaba en modo público.
+- En el cliente, `renderReaders` construye ahora su lista con `isAdmin || reader.active`, de modo que el listado y el selector **Filtrar por lector** solo muestran inactivos en modo administrador.
+- Ocultarlos únicamente en el cliente no habría bastado, porque la respuesta de la API seguía viajando completa. Se agregó `publicReader` en `server.js`: al público, un lector inactivo se reduce a `id`, `name` y `active: false`.
+- No se eliminan por completo de la respuesta a propósito. `readerName()` los necesita para poder leer la planificación de meses anteriores: agosto contiene a Kary Hernández Gonzalez, José Francisco Zumbado Arce y Andrea Sanabria, que hoy están inactivos. Se comprobó ejecutando el cliente real en modo público que `readerName` sigue devolviendo su nombre.
+- Conviene tener presente que esto oculta la **lista** de inactivos, no su nombre dentro de un plan pasado: la planificación en sí es pública, así que quien abra el reporte de agosto seguirá leyendo esos tres nombres.
+
+### Verificación
+
+- Se levantó el servidor real contra MongoDB y se comprobó la API: al público le llegan 41 lectores, de los cuales los 9 inactivos traen exactamente las claves `id`, `name` y `active`, ningún teléfono y ninguna nota. Al administrador le llegan los 41 completos, con las preferencias intactas en los 9 inactivos.
+- Se ejecutaron los seis archivos `common-*.js` reales en un DOM simulado, con los datos reales de MongoDB, en modo público y en modo administrador. Público: 32 tarjetas, 32 opciones en el filtro y ninguna etiqueta *Inactivo*. Administrador: 41 tarjetas, 41 opciones y la etiqueta presente. Los seis archivos cargaron sin errores.
+- Se ejecutó `estadisticas.js` de la misma forma y se revisó el HTML generado para septiembre y para agosto. En agosto aparecen correctamente los distintivos de titular y suplente, y los tres inactivos que sirvieron ese mes salen marcados con su misa.
+- `/admin/estadisticas.html` sirve los tres identificadores nuevos: `directoryMonth`, `readerDirectorySummary` y `readerDirectory`.
+- Se agregó una prueba de regresión de `publicReader`: un inactivo se reduce a tres campos y un activo conserva notas y preferencias pero nunca teléfono, hash ni `_id`. `npm test` finalizó con **27 pruebas aprobadas y 0 fallidas**.
+- `node --check` finalizó correctamente para `server.js`, todos los JavaScript de `private/js`, la suite y los scripts. `npm run format:check` pasa limpio y `git diff --check` no encontró errores.
+- Archivos tocados: `server.js`, `private/js/estadisticas.js`, `private/js/common-vistas.js`, `private/styles.css`, `public/estadisticas.html` y `test/server.test.js`.
+
+### Estado de los datos observado durante esta sesión
+
+- MongoDB tiene ahora **41 lectores: 32 activos y 9 inactivos**. La sesión anterior había dejado 42 y 33, así que una persona fue eliminada entre ambas sesiones.
+- **La planificación de septiembre ya no existe.** La colección de asignaciones contiene únicamente los 120 documentos de agosto de 2026. La sesión del 1 de septiembre había dejado septiembre con 96 asignaciones y 0 huecos; esos documentos ya no están. No se tocaron asignaciones durante esta sesión.
+- Por eso el directorio, que abre en el mes actual, muestra a los 32 activos como **Sin asignación este mes**. Es el dato correcto: septiembre está sin planificar.
+
+### Detalle menor observado, sin corregir
+
+- En el tablero de asignaciones, el desplegable de titulares solo ofrece lectores activos. Si se consulta un mes pasado cuyo titular hoy está inactivo, ese puesto se muestra vacío aunque el documento sí conserve su `readerId`. Es un comportamiento anterior a esta sesión y no lo introdujo este cambio; el reporte sí resuelve el nombre correctamente.

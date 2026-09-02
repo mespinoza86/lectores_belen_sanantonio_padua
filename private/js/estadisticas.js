@@ -106,6 +106,68 @@ function renderReaderConfirmations(readers, assignments, month) {
     : `<article class="card"><h3>Sin respuestas en ${esc(monthName(month))}</h3><p>No hay confirmaciones, rechazos ni asignaciones pendientes registradas para este mes.</p></article>`;
 }
 
+// Directorio administrativo: quién está activo, quién solo suple y quién está inactivo,
+// con la participación de cada persona durante el mes consultado.
+function monthPlacements(assignments, masses, month) {
+  const massName = id => masses.find(mass => mass.id === id)?.name || 'Misa';
+  const placements = new Map();
+  const add = (readerId, kind, massId) => {
+    if (!readerId) return;
+    const label = `${kind === 'titular' ? 'Titular' : 'Suplente'} · ${massName(massId)}`;
+    const current = placements.get(readerId) || [];
+    if (!current.some(entry => entry.label === label)) current.push({ kind, label });
+    placements.set(readerId, current);
+  };
+  assignments
+    .filter(assignment => assignment.month === month)
+    .forEach(assignment => {
+      add(assignment.readerId, 'titular', assignment.massId);
+      (assignment.substituteIds || []).forEach(id => add(id, 'substitute', assignment.massId));
+    });
+  return placements;
+}
+
+function renderReaderDirectory(readers, masses, assignments, month) {
+  const placements = monthPlacements(assignments, masses, month);
+  const activeMasses = masses.filter(mass => mass.active);
+  const byName = (a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+  const normal = readers.filter(reader => reader.active && !reader.substituteOnly).sort(byName);
+  const substitutes = readers.filter(reader => reader.active && reader.substituteOnly).sort(byName);
+  const inactive = readers.filter(reader => !reader.active).sort(byName);
+  const idle = [...normal, ...substitutes].filter(reader => !placements.has(reader.id)).length;
+  $('#readerDirectorySummary').innerHTML =
+    `<article><span class="stat-icon green">✓</span><div><strong>${normal.length}</strong><small>Activos normales</small></div></article><article><span class="stat-icon gold">↻</span><div><strong>${substitutes.length}</strong><small>Solo suplentes</small></div></article><article><span class="stat-icon rose">—</span><div><strong>${inactive.length}</strong><small>Inactivos</small></div></article><article><span class="stat-icon gold">…</span><div><strong>${idle}</strong><small>Activos sin asignación en ${esc(monthName(month))}</small></div></article>`;
+  const person = reader => {
+    const marks = (placements.get(reader.id) || []).map(
+      entry => `<span class="coverage-badge ${entry.kind}">${esc(entry.label)}</span>`,
+    );
+    if (reader.active && !marks.length)
+      marks.push('<span class="coverage-badge idle">Sin asignación este mes</span>');
+    if (reader.mustChangePassword)
+      marks.push('<span class="badge off">Cambio de contraseña pendiente</span>');
+    const details = [];
+    if (reader.phone) details.push(`Tel. ${esc(reader.phone)}`);
+    if (reader.active) {
+      const preferred = activeMasses.filter(mass => readerPrefersMass(reader, mass.id));
+      details.push(
+        `Prefiere: ${preferred.length ? preferred.map(mass => esc(mass.name)).join(' · ') : 'ninguna misa'}`,
+      );
+    } else
+      details.push(
+        placements.has(reader.id)
+          ? 'Inactivo hoy, pero figura en la planificación de este mes'
+          : 'Inactivo: no entra en ninguna planificación',
+      );
+    return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b>${marks.join('')}</div><small>${details.join(' · ')}</small></article>`;
+  };
+  const group = (title, kind, list, empty) =>
+    `<section class="coverage-group ${kind}"><div class="coverage-group-head"><h3>${esc(title)}</h3><span>${list.length}</span></div><div class="coverage-reader-list">${list.length ? list.map(person).join('') : `<article class="coverage-reader"><small>${empty}</small></article>`}</div></section>`;
+  $('#readerDirectory').innerHTML =
+    group('Activos normales', 'preferred', normal, 'No hay lectores activos.') +
+    group('Solo suplentes', 'flexible', substitutes, 'Ningún lector está configurado como solo suplente.') +
+    group('Inactivos', 'unavailable', inactive, 'No hay lectores inactivos.');
+}
+
 function render(readers, masses) {
   const activeReaders = readers.filter(reader => reader.active);
   const activeMasses = masses.filter(mass => mass.active);
@@ -163,6 +225,7 @@ async function load() {
     ]);
     statisticsData = { readers, masses, assignments };
     render(readers, masses);
+    renderReaderDirectory(readers, masses, assignments, $('#directoryMonth').value);
     renderReaderConfirmations(readers, assignments, $('#statisticsMonth').value);
   } catch (error) {
     $('#availabilityGrid').innerHTML =
@@ -175,6 +238,16 @@ $('#logoutBtn').addEventListener('click', async () => {
   sessionStorage.removeItem('admin_access_verified');
   await request('/api/auth/logout', { method: 'POST' });
   location.replace('/');
+});
+$('#directoryMonth').value = currentCostaRicaMonth();
+$('#directoryMonth').addEventListener('change', event => {
+  if (event.target.value)
+    renderReaderDirectory(
+      statisticsData.readers,
+      statisticsData.masses,
+      statisticsData.assignments,
+      event.target.value,
+    );
 });
 $('#statisticsMonth').value = currentCostaRicaMonth();
 $('#statisticsMonth').addEventListener('change', event => {
