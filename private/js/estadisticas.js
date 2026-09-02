@@ -161,7 +161,7 @@ function renderReaderDirectory(readers, masses, assignments, month) {
     return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b>${marks.join('')}</div><small>${details.join(' · ')}</small></article>`;
   };
   const group = (title, kind, list, empty) =>
-    `<section class="coverage-group ${kind}"><div class="coverage-group-head"><h3>${esc(title)}</h3><span>${list.length}</span></div><div class="coverage-reader-list">${list.length ? list.map(person).join('') : `<article class="coverage-reader"><small>${empty}</small></article>`}</div></section>`;
+    `<details class="coverage-group ${kind}"><summary class="coverage-group-head"><h3>${esc(title)}</h3><div class="coverage-group-meta"><span>${list.length}</span><span class="coverage-group-arrow" aria-hidden="true">⌄</span></div></summary><div class="coverage-reader-list">${list.length ? list.map(person).join('') : `<article class="coverage-reader"><small>${empty}</small></article>`}</div></details>`;
   $('#readerDirectory').innerHTML =
     group('Activos normales', 'preferred', normal, 'No hay lectores activos.') +
     group('Solo suplentes', 'flexible', substitutes, 'Ningún lector está configurado como solo suplente.') +

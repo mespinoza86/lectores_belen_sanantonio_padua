@@ -1379,3 +1379,15 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 ### Detalle menor observado, sin corregir
 
 - En el tablero de asignaciones, el desplegable de titulares solo ofrece lectores activos. Si se consulta un mes pasado cuyo titular hoy está inactivo, ese puesto se muestra vacío aunque el documento sí conserve su `readerId`. Es un comportamiento anterior a esta sesión y no lo introdujo este cambio; el reporte sí resuelve el nombre correctamente.
+
+### El directorio de lectores pasa a tres acordeones
+
+- Volcar los 41 nombres de golpe obligaba a bajar mucho para llegar a la cobertura por horario, así que las listas del directorio ahora nacen cerradas.
+- Los cuatro recuadros de conteo siguen siempre visibles. Debajo quedan las tres cabeceras de grupo con su número, y la lista de nombres se despliega solo al pulsar la cabecera.
+- Los tres grupos son independientes: se puede abrir **Inactivos** sin desplegar los otros dos. Es la consulta habitual.
+- Por decisión del usuario los tres abren siempre cerrados al recargar; no se recuerda cuál quedó abierto.
+- Se reutilizó el patrón que ya existía en **Misas de esta semana**: `details` y `summary` nativos, sin estado manual en JavaScript, con accesibilidad por teclado y la misma flecha que gira.
+- Las reglas de estilo se limitaron al ámbito `.reader-directory` para no alterar la vista de Cobertura, que comparte las clases `coverage-group`. La flecha necesita esa especificidad extra porque `.coverage-group-head span` ya daba forma circular a cualquier `span` de la cabecera.
+- Comprobado ejecutando `estadisticas.js` con los datos reales: se generan 3 `details`, ninguno con el atributo `open`, 3 `summary`, 3 flechas, las 42 tarjetas de contenido dentro y ninguna `section` del formato anterior. Las etiquetas quedan balanceadas.
+- `npm test` finalizó con 27 pruebas aprobadas y 0 fallidas; `npm run format:check` pasa limpio.
+- Archivos tocados: `private/js/estadisticas.js` y `private/styles.css`.
