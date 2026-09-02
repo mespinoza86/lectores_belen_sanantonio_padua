@@ -1391,3 +1391,38 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 - Comprobado ejecutando `estadisticas.js` con los datos reales: se generan 3 `details`, ninguno con el atributo `open`, 3 `summary`, 3 flechas, las 42 tarjetas de contenido dentro y ninguna `section` del formato anterior. Las etiquetas quedan balanceadas.
 - `npm test` finalizó con 27 pruebas aprobadas y 0 fallidas; `npm run format:check` pasa limpio.
 - Archivos tocados: `private/js/estadisticas.js` y `private/styles.css`.
+
+### Diagnóstico del PDF tradicional: nombres corridos
+
+- El usuario reportó nombres corridos en `LectoresSeptiembre2026.pdf`. Se leyó el PDF por dentro: **una sola página A4 vertical con una única imagen de 1600×1978 y cero fuentes**. No era texto, era una foto del reporte.
+- La causa de los nombres corridos estaba en `drawFittedText`: ajustaba el tamaño de letra pero **nunca fijaba `ctx.textAlign`**, así que heredaba la alineación de lo último dibujado. El título ponía `center` y la primera columna salía bien; las filas de fechas terminaban en `right`, y por eso los nombres de las columnas 2, 3 y 4 se dibujaban alineados a la derecha terminando en el centro de su columna, corridos media palabra hacia la izquierda.
+- Se comprobó midiendo la imagen extraída del PDF: la columna mide 399 px y "Yorleny Arrieta Solórzano" terminaba justo en x≈600, el centro exacto de su columna.
+- Lo agravaban dos cosas: `drawFittedText` encogía la letra nombre por nombre, así que los cuatro salían a tamaños distintos; y las cuatro columnas se dibujaban pegadas, sin separación, de modo que el nombre corrido chocaba con el vecino.
+- Además la regla `@page traditional{size:A4 landscape}` existía pero **nadie la usaba**, y una regla posterior `@page{size:A4 portrait}` la pisaba. Por eso las seis misas se comprimían en una sola página vertical, con la letra en unos 7 pt.
+
+### El formato tradicional pasa a tener una sola maquetación, en SVG
+
+- El problema de fondo eran **dos maquetaciones del mismo reporte**: la del lienzo dibujada a mano en JavaScript, que alimentaba la imagen y el PDF, y la del HTML con su propio CSS, que era la vista previa. Por eso el fallo de alineación vivía en una sola de las dos y en pantalla no se notaba.
+- Se descartó la idea de convertir en imagen el PDF ya generado: el navegador entrega el PDF al sistema y el JavaScript de la página nunca lo recupera. Haría falta una librería pesada o un navegador sin interfaz en el servidor.
+- Ahora el reporte se dibuja **una sola vez en SVG** y de ahí salen las tres salidas: el PDF imprime ese vector con texto real, el PNG rasteriza ese mismo SVG mediante un lienzo, y la vista previa de la página muestra el mismo SVG. Una maquetación, tres salidas, sin posibilidad de que vuelvan a desincronizarse.
+- El bug de alineación desaparece por construcción: en SVG cada `text` lleva su propio `text-anchor` y no existe un estado que se arrastre entre dibujos.
+- Los cuatro nombres de cada misa usan **un solo tamaño de letra**, el menor de los cuatro, para que la fila no quede con letras desiguales.
+- Se agregó separación entre las cuatro columnas, equivalente a las columnas angostas que usa el Excel de la parroquia.
+- Los suplentes pasan a ser una lista con los que existen. Se eliminó el relleno con **Sin asignar**, que ocupaba tres cuartas partes del bloque sin decir nada. Si no hay ninguno se muestra *Sin suplentes asignados*.
+- Se agregó el encabezado **Lectores Diaconía San Antonio de Belén de Padua** con el mes y el año debajo, repetido en cada página impresa.
+- La orientación horizontal se inyecta en un `style` temporal solo mientras se imprime, y se retira en `afterprint`. Una regla `@page` fija en la hoja afectaría también al **PDF actual**, que es vertical; ese era justamente el fallo anterior.
+- Las misas se reparten por **altura disponible**, no por una cantidad fija por página. Una misa con muchos suplentes es bastante más alta que una con uno solo, y con un número fijo de dos por página una planificación con doce o más suplentes en una misa habría desbordado y partido un bloque en dos hojas.
+
+### Verificación con navegador real
+
+- Se levantó Chrome sin interfaz y se ejecutó el código real de la aplicación contra los datos reales de MongoDB.
+- **PDF**: se llamó a la función de impresión de verdad, neutralizando solo el diálogo del navegador, y se capturó con `--print-to-pdf`. Agosto, septiembre y octubre dan **3 páginas, 0 imágenes, 6 fuentes y A4 horizontal**. Las páginas del PDF coinciden exactamente con los bloques generados, lo que prueba que ninguna página desborda. El archivo bajó de 216 KB a 104 KB.
+- **Imagen**: se recorrió el camino completo SVG → `Image` → lienzo → PNG. El SVG mide 1600×2254, el lienzo sale a 3200×4508 y `toDataURL` no lanza `SecurityError`, es decir el lienzo no queda contaminado. Se miró el PNG resultante: las seis misas correctas, nombres centrados y columnas separadas.
+- **Paginación**: se probó la función contra cuatro escenarios. Septiembre real reparte 2+2+2 con 838 unidades por página; octubre, con cinco fechas, 2+2+2 con 914; el caso extremo de cinco fechas y trece suplentes por misa baja solo a una misa por página con 618; y una sola misa da una página. Ninguno excede el límite de 1080.
+- **Página real**: se cargó `http://localhost:3000/reporte.html` en el navegador sin interfaz. La vista previa contiene el SVG, con 133 rectángulos y 242 textos, el título presente y **ningún error en consola**.
+- `npm test` finalizó con 27 pruebas aprobadas y 0 fallidas; `npm run format:check` pasa limpio y `node --check` finalizó bien en todos los JavaScript.
+- Archivos tocados: `private/js/common-reporte-tradicional.js`, `private/js/common-eventos.js` y `private/styles.css`.
+
+### Pendiente menor
+
+- El CSS de la vista previa anterior (`traditional-mass`, `traditional-column`, `traditional-reserves` y sus reglas de impresión) quedó sin uso al pasar la vista previa a SVG. Conviene retirarlo, pero la hoja está minificada y merece una revisión visual aparte; el bloque que lo contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí sigue haciendo falta.

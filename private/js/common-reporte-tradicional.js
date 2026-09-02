@@ -37,9 +37,8 @@ function traditionalReportData() {
             return { date, label: item ? traditionalRoleLabel(item.role) : '—' };
           }),
         })),
-        reserves: Array.from({ length: 4 }, (_, index) =>
-          reserves[index] ? readerName(reserves[index]) : 'Sin asignar',
-        ),
+        // Solo los suplentes que existen: el formato de la parroquia no rellena espacios vacíos.
+        reserves: reserves.map(readerId => readerName(readerId)),
       };
     });
 }
@@ -54,152 +53,260 @@ function renderTraditionalReport() {
   const target = $('#traditionalReport');
   if (!target) return;
   const data = traditionalReportData();
+  // La vista previa dibuja el mismo SVG que se exporta, para que lo que se ve en
+  // pantalla sea exactamente lo que sale en el PDF y en la imagen.
   target.innerHTML = data.length
-    ? data
-        .map(
-          ({ mass, columns, reserves }) =>
-            `<section class="traditional-mass"><h3>${esc(traditionalMassTitle(mass))}</h3><div class="traditional-columns">${columns.map(column => `<div class="traditional-column"><h4>${esc(column.name)}</h4>${column.rows.map(row => `<div><span>${esc(`${localDate(row.date).getDate()} ${months[localDate(row.date).getMonth()]}`)}</span><b>${esc(row.label)}</b></div>`).join('')}</div>`).join('')}</div><div class="traditional-reserves"><b>Suplentes:</b>${reserves.map((name, index) => `<span>${index + 1}. ${esc(name)}</span>`).join('')}</div></section>`,
-        )
-        .join('')
+    ? buildTraditionalSvg(data)
     : '<p class="empty">No hay celebraciones para este mes.</p>';
 }
-function drawFittedText(ctx, text, x, y, maxWidth, fontSize = 22) {
-  let size = fontSize;
-  do {
-    ctx.font = `700 ${size}px Arial`;
-    if (ctx.measureText(text).width <= maxWidth) break;
+
+// Maquetación única del formato tradicional.
+// El reporte se dibuja una sola vez en SVG y de ahí salen las dos exportaciones:
+// el PDF imprime ese vector con texto real y el PNG rasteriza ese mismo SVG.
+// Tener una sola maquetación evita que las dos salidas vuelvan a desincronizarse.
+const TRADITIONAL_TITLE = 'Lectores Diaconía San Antonio de Belén de Padua';
+const TRADITIONAL_FONT = 'Arial, Helvetica, sans-serif';
+const TRADITIONAL_LAYOUT = {
+  width: 1600,
+  pad: 24,
+  titleH: 104,
+  massGap: 22,
+  headerH: 54,
+  nameH: 46,
+  rowH: 38,
+  colGap: 14,
+  reserveLabelH: 36,
+  reserveRowH: 32,
+  reservePad: 12,
+  // Altura util de una A4 horizontal con 8 mm de margen, en las unidades del SVG:
+  // 281 mm de ancho por 194 mm de alto sobre un lienzo de 1600, con un margen de
+  // seguridad. Las misas se reparten por altura y no por cantidad, porque una misa
+  // con muchos suplentes es bastante mas alta que una con uno solo.
+  pageBudget: 1080,
+};
+let traditionalMeasureContext = null;
+// Se mide con un lienzo que nunca se dibuja: solo hace falta para saber cuánto
+// ocupa un nombre y bajarle el tamaño hasta que quepa dentro de su columna.
+function traditionalFitSize(text, maxWidth, startSize, weight = 700) {
+  if (!traditionalMeasureContext)
+    traditionalMeasureContext = document.createElement('canvas').getContext('2d');
+  let size = startSize;
+  while (size > 9) {
+    traditionalMeasureContext.font = `${weight} ${size}px Arial`;
+    if (traditionalMeasureContext.measureText(text).width <= maxWidth) break;
     size--;
-  } while (size > 12);
-  ctx.fillText(text, x, y);
+  }
+  return size;
 }
-function createTraditionalCanvas() {
-  const data = traditionalReportData();
-  if (!data.length) return null;
-  const width = 1600,
-    margin = 2,
-    headerH = 54,
-    nameH = 42,
-    rowH = 38,
-    reserveH = 66,
-    gap = 18,
-    sectionH =
-      headerH +
-      nameH +
-      Math.max(...data.flatMap(item => item.columns.map(column => column.rows.length))) * rowH +
-      reserveH,
-    height = margin * 2 + data.length * sectionH + (data.length - 1) * gap,
-    canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, width, height);
-  ctx.textBaseline = 'middle';
-  let top = margin;
-  for (const item of data) {
-    const rows = item.columns[0]?.rows.length || 0,
-      colW = (width - margin * 2) / 4;
-    ctx.fillStyle = '#3f66a3';
-    ctx.fillRect(margin, top, width - margin * 2, headerH);
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    drawFittedText(ctx, traditionalMassTitle(item.mass), width / 2, top + headerH / 2, width - 40, 30);
-    top += headerH;
-    item.columns.forEach((column, index) => {
-      const x = margin + index * colW;
-      ctx.fillStyle = '#5d9bd3';
-      ctx.fillRect(x, top, colW, nameH);
-      ctx.strokeStyle = '#1d2733';
-      ctx.strokeRect(x, top, colW, nameH);
-      ctx.fillStyle = '#fff';
-      drawFittedText(ctx, column.name, x + colW / 2, top + nameH / 2, colW - 16, 20);
-      column.rows.forEach((row, rowIndex) => {
-        const y = top + nameH + rowIndex * rowH;
-        ctx.fillStyle = rowIndex % 2 ? '#fff' : '#d9e3f3';
-        ctx.fillRect(x, y, colW, rowH);
-        ctx.strokeStyle = '#68717b';
-        ctx.strokeRect(x, y, colW, rowH);
-        ctx.fillStyle = '#111';
-        ctx.textAlign = 'left';
-        ctx.font = '18px Arial';
-        ctx.fillText(
+function traditionalTextSvg(text, x, y, { size, weight = 400, fill = '#111', anchor = 'middle' }) {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" dominant-baseline="central" font-family="${TRADITIONAL_FONT}" font-size="${size}" font-weight="${weight}" fill="${fill}">${esc(text)}</text>`;
+}
+function traditionalBlockWidth() {
+  const layout = TRADITIONAL_LAYOUT;
+  return (layout.width - layout.pad * 2 - layout.colGap * 3) / 4;
+}
+function traditionalReserveRows(item) {
+  return Math.max(1, Math.ceil(item.reserves.length / 4));
+}
+function traditionalSectionHeight(item) {
+  const layout = TRADITIONAL_LAYOUT;
+  return (
+    layout.headerH +
+    layout.nameH +
+    (item.columns[0]?.rows.length || 0) * layout.rowH +
+    layout.reserveLabelH +
+    traditionalReserveRows(item) * layout.reserveRowH +
+    layout.reservePad
+  );
+}
+function traditionalSectionSvg(item, top) {
+  const layout = TRADITIONAL_LAYOUT,
+    left = layout.pad,
+    inner = layout.width - layout.pad * 2,
+    blockW = traditionalBlockWidth(),
+    title = traditionalMassTitle(item.mass),
+    parts = [`<rect x="${left}" y="${top}" width="${inner}" height="${layout.headerH}" fill="#3f66a3"/>`];
+  parts.push(
+    traditionalTextSvg(title, left + inner / 2, top + layout.headerH / 2, {
+      size: traditionalFitSize(title, inner - 40, 30),
+      weight: 700,
+      fill: '#fff',
+    }),
+  );
+  const namesTop = top + layout.headerH,
+    rows = item.columns[0]?.rows.length || 0,
+    // Un solo tamaño para los cuatro nombres: si cada uno se ajustara por su cuenta,
+    // la fila quedaría con letras de distinto tamaño y se vería desordenada.
+    nameSize = Math.min(...item.columns.map(column => traditionalFitSize(column.name, blockW - 16, 21)));
+  item.columns.forEach((column, index) => {
+    const x = left + index * (blockW + layout.colGap);
+    parts.push(
+      `<rect x="${x}" y="${namesTop}" width="${blockW}" height="${layout.nameH}" fill="#5d9bd3" stroke="#1d2733"/>`,
+      traditionalTextSvg(column.name, x + blockW / 2, namesTop + layout.nameH / 2, {
+        size: nameSize,
+        weight: 700,
+        fill: '#fff',
+      }),
+    );
+    column.rows.forEach((row, rowIndex) => {
+      const y = namesTop + layout.nameH + rowIndex * layout.rowH;
+      parts.push(
+        `<rect x="${x}" y="${y}" width="${blockW}" height="${layout.rowH}" fill="${rowIndex % 2 ? '#fff' : '#d9e3f3'}" stroke="#68717b"/>`,
+        traditionalTextSvg(
           `${localDate(row.date).getDate()} ${months[localDate(row.date).getMonth()]}`,
-          x + 8,
-          y + rowH / 2,
-        );
-        ctx.textAlign = 'right';
-        ctx.font = '19px Arial';
-        ctx.fillText(row.label, x + colW - 8, y + rowH / 2);
-      });
-    });
-    top += nameH + rows * rowH;
-    ctx.fillStyle = '#eef2f8';
-    ctx.fillRect(margin, top, width - margin * 2, reserveH);
-    ctx.strokeStyle = '#1d2733';
-    ctx.strokeRect(margin, top, width - margin * 2, reserveH);
-    ctx.fillStyle = '#111';
-    ctx.textAlign = 'left';
-    ctx.font = '700 19px Arial';
-    ctx.fillText('Suplentes:', margin + 12, top + reserveH / 2);
-    const reserveStart = margin + 125,
-      reserveW = (width - reserveStart - margin) / 4;
-    item.reserves.forEach((name, index) => {
-      ctx.textAlign = 'center';
-      drawFittedText(
-        ctx,
-        `${index + 1}. ${name}`,
-        reserveStart + index * reserveW + reserveW / 2,
-        top + reserveH / 2,
-        reserveW - 12,
-        17,
+          x + 10,
+          y + layout.rowH / 2,
+          { size: 18, anchor: 'start' },
+        ),
+        traditionalTextSvg(row.label, x + blockW - 10, y + layout.rowH / 2, {
+          size: 19,
+          weight: 700,
+          anchor: 'end',
+        }),
       );
     });
-    top += reserveH + gap;
+  });
+  const reservesTop = namesTop + layout.nameH + rows * layout.rowH,
+    reservesH = layout.reserveLabelH + traditionalReserveRows(item) * layout.reserveRowH + layout.reservePad;
+  parts.push(
+    `<rect x="${left}" y="${reservesTop}" width="${inner}" height="${reservesH}" fill="#eef2f8" stroke="#1d2733"/>`,
+    traditionalTextSvg('Suplentes', left + 14, reservesTop + layout.reserveLabelH / 2, {
+      size: 19,
+      weight: 700,
+      anchor: 'start',
+    }),
+  );
+  if (item.reserves.length)
+    item.reserves.forEach((name, index) => {
+      const label = `${index + 1}. ${name}`,
+        x = left + (index % 4) * (blockW + layout.colGap),
+        y =
+          reservesTop +
+          layout.reserveLabelH +
+          Math.floor(index / 4) * layout.reserveRowH +
+          layout.reserveRowH / 2;
+      parts.push(
+        traditionalTextSvg(label, x + blockW / 2, y, {
+          size: traditionalFitSize(label, blockW - 12, 18),
+          weight: 700,
+        }),
+      );
+    });
+  else
+    parts.push(
+      traditionalTextSvg(
+        'Sin suplentes asignados',
+        left + inner / 2,
+        reservesTop + layout.reserveLabelH + layout.reserveRowH / 2,
+        { size: 18, fill: '#5c6670' },
+      ),
+    );
+  return parts.join('');
+}
+function buildTraditionalSvg(items) {
+  const layout = TRADITIONAL_LAYOUT,
+    parts = [];
+  let top = layout.pad;
+  parts.push(
+    traditionalTextSvg(TRADITIONAL_TITLE, layout.width / 2, top + 30, {
+      size: traditionalFitSize(TRADITIONAL_TITLE, layout.width - layout.pad * 2, 38),
+      weight: 700,
+      fill: '#24405f',
+    }),
+    traditionalTextSvg(monthLabel(state.month), layout.width / 2, top + 74, {
+      size: 27,
+      weight: 700,
+      fill: '#3f66a3',
+    }),
+  );
+  top += layout.titleH;
+  items.forEach((item, index) => {
+    parts.push(traditionalSectionSvg(item, top));
+    top += traditionalSectionHeight(item);
+    if (index < items.length - 1) top += layout.massGap;
+  });
+  const height = Math.round(top + layout.pad);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${height}" viewBox="0 0 ${layout.width} ${height}"><rect width="${layout.width}" height="${height}" fill="#ffffff"/>${parts.join('')}</svg>`;
+}
+function traditionalPrintPages() {
+  const data = traditionalReportData(),
+    layout = TRADITIONAL_LAYOUT,
+    fixed = layout.pad * 2 + layout.titleH,
+    pages = [];
+  let current = [],
+    height = fixed;
+  for (const item of data) {
+    const section = traditionalSectionHeight(item),
+      extra = current.length ? layout.massGap + section : section;
+    if (current.length && height + extra > layout.pageBudget) {
+      pages.push(current);
+      current = [item];
+      height = fixed + section;
+    } else {
+      current.push(item);
+      height += extra;
+    }
   }
-  return canvas;
+  if (current.length) pages.push(current);
+  return pages;
 }
-function downloadTraditionalImage() {
-  const canvas = createTraditionalCanvas();
-  if (!canvas) return toast('No hay celebraciones para exportar', true);
-  canvas.toBlob(blob => {
-    if (!blob) return toast('No se pudo crear la imagen', true);
-    const url = URL.createObjectURL(blob),
-      link = document.createElement('a');
-    link.href = url;
-    link.download = `lectores-formato-tradicional-${state.month}.png`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, 'image/png');
-}
-function printTraditionalImage() {
-  const canvas = createTraditionalCanvas();
-  if (!canvas) return toast('No hay celebraciones para exportar', true);
-  let target = $('#traditionalPrintImage');
+function printTraditionalReport() {
+  const pages = traditionalPrintPages();
+  if (!pages.length) return toast('No hay celebraciones para exportar', true);
+  let target = $('#traditionalPrintPages');
   if (!target) {
     target = document.createElement('div');
-    target.id = 'traditionalPrintImage';
+    target.id = 'traditionalPrintPages';
     document.body.append(target);
   }
-  target.innerHTML = '';
-  const image = document.createElement('img');
-  image.alt = `Programación tradicional de ${monthLabel(state.month)}`;
-  target.append(image);
-  document.body.classList.add('print-traditional-image');
-  let opened = false;
-  const openPrint = () => {
-    if (opened) return;
-    opened = true;
-    window.addEventListener(
-      'afterprint',
-      () => {
-        document.body.classList.remove('print-traditional-image');
-        target.remove();
-      },
-      { once: true },
-    );
-    window.print();
+  target.innerHTML = pages
+    .map(items => `<div class="traditional-print-page">${buildTraditionalSvg(items)}</div>`)
+    .join('');
+  // La orientación se inyecta solo mientras se imprime: una regla @page fija en la
+  // hoja de estilos afectaría también al PDF actual, que es vertical.
+  const pageRule = document.createElement('style');
+  pageRule.textContent = '@page{size:A4 landscape;margin:8mm}';
+  document.head.append(pageRule);
+  document.body.classList.add('print-traditional-svg');
+  window.addEventListener(
+    'afterprint',
+    () => {
+      document.body.classList.remove('print-traditional-svg');
+      target.remove();
+      pageRule.remove();
+    },
+    { once: true },
+  );
+  window.print();
+}
+function downloadTraditionalImage() {
+  const data = traditionalReportData();
+  if (!data.length) return toast('No hay celebraciones para exportar', true);
+  const scale = 2,
+    url = URL.createObjectURL(new Blob([buildTraditionalSvg(data)], { type: 'image/svg+xml;charset=utf-8' })),
+    image = new Image();
+  image.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width * scale;
+    canvas.height = image.height * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(blob => {
+      if (!blob) return toast('No se pudo crear la imagen', true);
+      const link = document.createElement('a'),
+        objectUrl = URL.createObjectURL(blob);
+      link.href = objectUrl;
+      link.download = `lectores-formato-tradicional-${state.month}.png`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    }, 'image/png');
   };
-  image.onload = openPrint;
-  image.src = canvas.toDataURL('image/png');
-  if (image.complete) setTimeout(openPrint, 0);
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
+    toast('No se pudo crear la imagen', true);
+  };
+  image.src = url;
 }
