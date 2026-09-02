@@ -1426,3 +1426,23 @@ Lista viva de lo que queda pendiente. Está al final del documento a propósito,
 ### Pendiente menor
 
 - El CSS de la vista previa anterior (`traditional-mass`, `traditional-column`, `traditional-reserves` y sus reglas de impresión) quedó sin uso al pasar la vista previa a SVG. Conviene retirarlo, pero la hoja está minificada y merece una revisión visual aparte; el bloque que lo contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí sigue haciendo falta.
+
+### La imagen fallaba por la política de seguridad, y el PDF pasa a una sola página
+
+- **La imagen no se creaba.** El navegador reportaba: *loading the image 'blob:…' violates the following Content Security Policy directive: "img-src 'self' data:"*. La CSP del servidor admite `data:` pero no `blob:`, y `downloadTraditionalImage` entregaba el SVG a la etiqueta `img` mediante `URL.createObjectURL`.
+- Se corrigió **sin tocar la CSP**: el SVG se entrega ahora como URL `data:` en base64, que la política ya permite. La codificación se hace por trozos de 32 KB porque pasar el arreglo completo a `String.fromCharCode` desborda la pila. La descarga del PNG resultante sigue usando un blob, que no pasa por `img-src` y nunca estuvo bloqueada.
+- **Por qué no lo detecté antes:** la verificación anterior se hizo sobre páginas `file://`, que no llevan CSP. La comprobación de esta sesión se hizo contra el servidor real, con la cabecera puesta.
+- **El PDF pasa de tres páginas a una sola**, por pedido expreso del usuario. La orientación vuelve a ser vertical, que es la que corresponde: la proporción del dibujo, 1600 × 2482, es casi idéntica a la de una A4 vertical, mientras que en horizontal el mes completo saldría mucho más pequeño.
+- El tamaño ya no se deja al navegador. El SVG se emite con ancho y alto **en milímetros**, calculados como `min(anchoDisponible / 1600, altoDisponible / altoDelDibujo)`, de modo que el mes entero entra siempre en una hoja por muy alta que sea la planificación.
+- El área útil se fijó en **192 × 278 mm**, un 1 % menos que los 194 × 281 reales de una A4 vertical con 8 mm de margen. La holgura importa: en la primera prueba agosto ocupaba exactamente 281,00 mm y Chrome lo empujaba a una segunda página por redondeo.
+- Se eliminaron `traditionalPrintPages` y `pageBudget`, que repartían las misas por altura entre varias hojas. Ya no hacen falta.
+- Contrapartida honesta: al caber todo en una hoja, el texto se imprime a unos **6 pt**. Es el costo de la página única y es comparable al Excel de la parroquia, que imprime con escala del 22 %.
+
+### Verificación contra el servidor real
+
+- Se levantó Chrome sin interfaz apuntando a `http://localhost:3000`, con la CSP real, y se ejecutaron los dos caminos completos.
+- **Imagen**: la URL empieza por `data:image/svg+xml;base64,`, no hay ninguna violación de CSP y `toDataURL` devuelve el PNG sin lanzar `SecurityError`. Agosto 1,27 MB, septiembre 1,14 MB, octubre 0,76 MB.
+- **PDF**: agosto, septiembre y octubre dan **1 página, 0 imágenes y 6 fuentes**, en A4 vertical. Las medidas impresas son 179,21 × 278,00 mm, 192,00 × 270,48 mm y 190,90 × 278,00 mm, todas dentro del área útil.
+- Durante la prueba se detectó de paso que un `script` en línea queda bloqueado por `script-src 'self'`; la página de prueba se rehízo con un archivo externo, igual que hace la aplicación real. Ambos archivos temporales se eliminaron al terminar.
+- `npm test` finalizó con 27 pruebas aprobadas y 0 fallidas. `npm run format:check` pasa limpio y `node --check` finalizó bien en `server.js` y en todos los JavaScript.
+- Archivos tocados: `private/js/common-reporte-tradicional.js` y `private/styles.css`.

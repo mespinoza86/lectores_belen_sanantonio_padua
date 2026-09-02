@@ -78,11 +78,12 @@ const TRADITIONAL_LAYOUT = {
   reserveLabelH: 36,
   reserveRowH: 32,
   reservePad: 12,
-  // Altura util de una A4 horizontal con 8 mm de margen, en las unidades del SVG:
-  // 281 mm de ancho por 194 mm de alto sobre un lienzo de 1600, con un margen de
-  // seguridad. Las misas se reparten por altura y no por cantidad, porque una misa
-  // con muchos suplentes es bastante mas alta que una con uno solo.
-  pageBudget: 1080,
+  // Área útil de una A4 vertical con 8 mm de margen, 194 x 281 mm, menos un 1 % de
+  // holgura. El SVG se emite con estas medidas en milímetros para que el mes completo
+  // entre siempre en una sola hoja. La holgura importa: al ocupar el alto exacto,
+  // cualquier redondeo del navegador empuja el dibujo a una segunda página.
+  pageWidthMm: 192,
+  pageHeightMm: 278,
 };
 let traditionalMeasureContext = null;
 // Se mide con un lienzo que nunca se dibuja: solo hace falta para saber cuánto
@@ -203,7 +204,7 @@ function traditionalSectionSvg(item, top) {
     );
   return parts.join('');
 }
-function buildTraditionalSvg(items) {
+function buildTraditionalSvg(items, fitToPage = false) {
   const layout = TRADITIONAL_LAYOUT,
     parts = [];
   let top = layout.pad;
@@ -226,46 +227,39 @@ function buildTraditionalSvg(items) {
     if (index < items.length - 1) top += layout.massGap;
   });
   const height = Math.round(top + layout.pad);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${height}" viewBox="0 0 ${layout.width} ${height}"><rect width="${layout.width}" height="${height}" fill="#ffffff"/>${parts.join('')}</svg>`;
+  // Al imprimir se fija el tamaño en milímetros en vez de dejar que el navegador
+  // escale al ancho: así el mes entero cabe siempre en una hoja, por alta que sea
+  // la planificacion, en lugar de desbordar a una segunda pagina.
+  const scale = Math.min(layout.pageWidthMm / layout.width, layout.pageHeightMm / height),
+    size = fitToPage
+      ? `width="${(layout.width * scale).toFixed(2)}mm" height="${(height * scale).toFixed(2)}mm"`
+      : `width="${layout.width}" height="${height}"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" ${size} viewBox="0 0 ${layout.width} ${height}"><rect width="${layout.width}" height="${height}" fill="#ffffff"/>${parts.join('')}</svg>`;
 }
-function traditionalPrintPages() {
-  const data = traditionalReportData(),
-    layout = TRADITIONAL_LAYOUT,
-    fixed = layout.pad * 2 + layout.titleH,
-    pages = [];
-  let current = [],
-    height = fixed;
-  for (const item of data) {
-    const section = traditionalSectionHeight(item),
-      extra = current.length ? layout.massGap + section : section;
-    if (current.length && height + extra > layout.pageBudget) {
-      pages.push(current);
-      current = [item];
-      height = fixed + section;
-    } else {
-      current.push(item);
-      height += extra;
-    }
-  }
-  if (current.length) pages.push(current);
-  return pages;
+// La política de seguridad del servidor declara `img-src 'self' data:`, sin `blob:`,
+// así que el SVG se entrega a la imagen como URL data: en base64. Se codifica por
+// trozos porque pasar el arreglo completo a fromCharCode desborda la pila.
+function traditionalSvgDataUrl(svg) {
+  const bytes = new TextEncoder().encode(svg);
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 0x8000)
+    binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000));
+  return 'data:image/svg+xml;base64,' + btoa(binary);
 }
 function printTraditionalReport() {
-  const pages = traditionalPrintPages();
-  if (!pages.length) return toast('No hay celebraciones para exportar', true);
+  const data = traditionalReportData();
+  if (!data.length) return toast('No hay celebraciones para exportar', true);
   let target = $('#traditionalPrintPages');
   if (!target) {
     target = document.createElement('div');
     target.id = 'traditionalPrintPages';
     document.body.append(target);
   }
-  target.innerHTML = pages
-    .map(items => `<div class="traditional-print-page">${buildTraditionalSvg(items)}</div>`)
-    .join('');
+  target.innerHTML = `<div class="traditional-print-page">${buildTraditionalSvg(data, true)}</div>`;
   // La orientación se inyecta solo mientras se imprime: una regla @page fija en la
   // hoja de estilos afectaría también al PDF actual, que es vertical.
   const pageRule = document.createElement('style');
-  pageRule.textContent = '@page{size:A4 landscape;margin:8mm}';
+  pageRule.textContent = '@page{size:A4 portrait;margin:8mm}';
   document.head.append(pageRule);
   document.body.classList.add('print-traditional-svg');
   window.addEventListener(
@@ -283,7 +277,7 @@ function downloadTraditionalImage() {
   const data = traditionalReportData();
   if (!data.length) return toast('No hay celebraciones para exportar', true);
   const scale = 2,
-    url = URL.createObjectURL(new Blob([buildTraditionalSvg(data)], { type: 'image/svg+xml;charset=utf-8' })),
+    url = traditionalSvgDataUrl(buildTraditionalSvg(data)),
     image = new Image();
   image.onload = () => {
     const canvas = document.createElement('canvas');
@@ -293,7 +287,6 @@ function downloadTraditionalImage() {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    URL.revokeObjectURL(url);
     canvas.toBlob(blob => {
       if (!blob) return toast('No se pudo crear la imagen', true);
       const link = document.createElement('a'),
@@ -304,9 +297,6 @@ function downloadTraditionalImage() {
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     }, 'image/png');
   };
-  image.onerror = () => {
-    URL.revokeObjectURL(url);
-    toast('No se pudo crear la imagen', true);
-  };
+  image.onerror = () => toast('No se pudo crear la imagen', true);
   image.src = url;
 }
