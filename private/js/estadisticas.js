@@ -134,9 +134,21 @@ function renderReaderDirectory(readers, masses, assignments, month) {
   const normal = readers.filter(reader => reader.active && !reader.substituteOnly).sort(byName);
   const substitutes = readers.filter(reader => reader.active && reader.substituteOnly).sort(byName);
   const inactive = readers.filter(reader => !reader.active).sort(byName);
-  const idle = [...normal, ...substitutes].filter(reader => !placements.has(reader.id)).length;
+  const idleNormal = normal.filter(reader => !placements.has(reader.id));
+  const idleSubstitutes = substitutes.filter(reader => !placements.has(reader.id));
+  const idle = [...idleNormal, ...idleSubstitutes];
   $('#readerDirectorySummary').innerHTML =
-    `<article><span class="stat-icon green">✓</span><div><strong>${normal.length}</strong><small>Activos normales</small></div></article><article><span class="stat-icon gold">↻</span><div><strong>${substitutes.length}</strong><small>Solo suplentes</small></div></article><article><span class="stat-icon rose">—</span><div><strong>${inactive.length}</strong><small>Inactivos</small></div></article><article><span class="stat-icon gold">…</span><div><strong>${idle}</strong><small>Activos sin asignación en ${esc(monthName(month))}</small></div></article>`;
+    `<article><span class="stat-icon green">✓</span><div><strong>${normal.length}</strong><small>Activos normales</small></div></article><article><span class="stat-icon gold">↻</span><div><strong>${substitutes.length}</strong><small>Solo suplentes</small></div></article><article><span class="stat-icon rose">—</span><div><strong>${inactive.length}</strong><small>Inactivos</small></div></article><article><span class="stat-icon gold">…</span><div><strong>${idle.length}</strong><small>Activos sin asignación en ${esc(monthName(month))}</small></div></article>`;
+  const unassignedPerson = reader => {
+    const preferred = activeMasses.filter(mass => readerPrefersMass(reader, mass.id));
+    return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b><span class="coverage-badge ${reader.substituteOnly ? 'substitute-only' : 'normal'}">${reader.substituteOnly ? 'Solo suplente' : 'Lector normal'}</span></div><small><b>Prefiere:</b> ${preferred.length ? preferred.map(mass => esc(mass.name)).join(' · ') : 'Ninguna misa'}</small></article>`;
+  };
+  const unassignedSection = (title, list) =>
+    list.length
+      ? `<section class="unassigned-reader-section"><h4>${esc(title)} <span>${list.length}</span></h4><div class="coverage-reader-list">${list.map(unassignedPerson).join('')}</div></section>`
+      : '';
+  $('#readerUnassignedDirectory').innerHTML =
+    `<details class="coverage-group idle unassigned-readers" open><summary class="coverage-group-head"><h3>Lectores sin asignación</h3><div class="coverage-group-meta"><span>${idle.length}</span><span class="coverage-group-arrow" aria-hidden="true">⌄</span></div></summary>${idle.length ? `<div class="unassigned-reader-sections">${unassignedSection('Pueden ser titulares o suplentes', idleNormal)}${unassignedSection('Disponibles únicamente como suplentes', idleSubstitutes)}</div>` : '<div class="coverage-reader-list"><article class="coverage-reader unassigned-empty"><small>Todos los lectores activos tienen asignación este mes.</small></article></div>'}</details>`;
   const person = reader => {
     const marks = (placements.get(reader.id) || []).map(
       entry => `<span class="coverage-badge ${entry.kind}">${esc(entry.label)}</span>`,

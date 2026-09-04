@@ -376,6 +376,32 @@ function readerMonthPlacements(readerId) {
   );
   return labels;
 }
+function renderCoverageUnassigned(masses) {
+  const content = $('#coverageUnassigned');
+  if (!content) return;
+  const assignedReaderIds = new Set();
+  state.assignments
+    .filter(item => item.month === state.month)
+    .forEach(item => {
+      if (item.readerId) assignedReaderIds.add(item.readerId);
+      (item.substituteIds || []).forEach(readerId => assignedReaderIds.add(readerId));
+    });
+  const query = coverageSearch.trim().toLocaleLowerCase('es');
+  const allUnassigned = state.readers
+    .filter(reader => reader.active && !assignedReaderIds.has(reader.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  const visible = allUnassigned.filter(
+    reader => !query || reader.name.toLocaleLowerCase('es').includes(query),
+  );
+  const card = reader => {
+    const preferred = masses.filter(mass => readerPrefersMass(reader, mass.id));
+    return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b><span class="coverage-badge ${reader.substituteOnly ? 'substitute-only' : 'normal'}">${reader.substituteOnly ? 'Solo suplente' : 'Lector normal'}</span></div><small><b>Prefiere:</b> ${preferred.length ? preferred.map(mass => esc(mass.name)).join(' · ') : 'Ninguna misa'}</small></article>`;
+  };
+  const emptyMessage = query
+    ? 'No hay lectores sin asignación que coincidan con la búsqueda.'
+    : 'Todos los lectores activos tienen asignación este mes.';
+  content.innerHTML = `<details class="coverage-group idle unassigned-readers" open><summary class="coverage-group-head"><h3>Lectores sin asignación</h3><div class="coverage-group-meta"><span>${allUnassigned.length}</span><span class="coverage-group-arrow" aria-hidden="true">⌄</span></div></summary><div class="coverage-reader-list">${visible.length ? visible.map(card).join('') : `<article class="coverage-reader unassigned-empty"><small>${emptyMessage}</small></article>`}</div></details>`;
+}
 function renderCoverage() {
   const massSelect = $('#coverageMass'),
     content = $('#coverageContent');
@@ -390,6 +416,7 @@ function renderCoverage() {
         `<option value="${esc(mass.id)}" ${mass.id === coverageMassId ? 'selected' : ''}>${esc(mass.name)} · ${esc(massSchedule(mass))}</option>`,
     )
     .join('');
+  renderCoverageUnassigned(masses);
   const mass = masses.find(item => item.id === coverageMassId);
   if (!mass) {
     content.innerHTML = '<div class="empty">No hay misas activas durante este mes.</div>';
