@@ -1506,6 +1506,44 @@ Cada uno tiene su sección propia más arriba, con el diagnóstico y la verifica
 - **Verificar con la CSP puesta.** El fallo de la imagen no apareció en las pruebas porque se hicieron sobre páginas `file://`, que no llevan cabecera de seguridad. Cualquier prueba de algo que cargue recursos en el navegador debe hacerse contra el servidor real. De paso: un `script` en línea también queda bloqueado por `script-src 'self'`.
 - **Una funcionalidad, una maquetación.** El bug de los nombres corridos sobrevivió meses porque el formato tradicional estaba dibujado dos veces, en lienzo y en HTML, y el fallo vivía solo en una. Al unificarlo en SVG el error dejó de ser posible por construcción.
 
+## Propuesta acordada del 3 de septiembre de 2026
+
+### Lectores activos sin asignación
+
+Quedaron acordadas y pendientes dos presentaciones de la misma información: una para todas las personas en **Cobertura** y otra de apoyo administrativo en **Estadísticas**.
+
+#### Regla compartida
+
+- Se considera **sin asignación** a un lector que esté activo y que, en el mes consultado, no aparezca como titular en ningún documento de asignación ni dentro de ninguna lista `substituteIds`.
+- Los lectores inactivos no formarán parte de este grupo, porque no están disponibles para planificar.
+- Se incluirán tanto lectores activos normales como lectores activos configurados como **Solo suplente**. La interfaz distinguirá claramente ambas condiciones.
+- El resultado se recalculará al cambiar el mes. Una persona puede estar sin asignación en un mes y participar en otro.
+- **Sin asignación** será un dato derivado, no una casilla nueva ni una propiedad adicional guardada en MongoDB.
+- No se necesita una colección ni una ruta de escritura nueva: se usarán los lectores, las misas y las asignaciones que la aplicación ya carga para el mes seleccionado.
+
+#### Presentación pública en Cobertura
+
+- Se conservará exactamente la consulta actual de **Cobertura**: selección de misa, totales, grupos de disponibilidad y búsqueda de personas.
+- Inmediatamente debajo del campo **Buscar lector** se agregará un acordeón titulado **Lectores sin asignación**.
+- El acordeón aparecerá **abierto inicialmente** cada vez que se cargue la vista.
+- Será visible para todas las personas tanto en `/cobertura.html` como, por compartir la vista, en `/admin/cobertura.html`.
+- Para cada lector se mostrará el nombre, una etiqueta **Lector normal** o **Solo suplente**, y las misas que tiene como preferidas.
+- Esta consulta será exclusivamente de lectura y no incluirá botones para editar lectores o crear asignaciones.
+- No mostrará teléfonos, contraseñas, notas administrativas ni datos de lectores inactivos.
+- Si no hay personas sin asignación, el acordeón permanecerá visible y mostrará un mensaje como **Todos los lectores activos tienen asignación este mes**.
+
+#### Presentación administrativa en Estadísticas
+
+- Además de aparecer en Cobertura administrativa, se agregará un grupo dedicado dentro de **Estadísticas → Directorio de lectores**.
+- Se colocará debajo de los cuatro indicadores del Directorio y antes de los acordeones actuales **Activos normales**, **Solo suplentes** e **Inactivos**.
+- Usará el selector de mes propio del Directorio y se actualizará junto con sus indicadores.
+- Se presentará como un acordeón **Lectores sin asignación**, abierto inicialmente.
+- Dentro del acordeón se separarán visualmente los lectores normales, que pueden ser titulares o suplentes, de quienes están configurados exclusivamente como suplentes.
+- Cada persona mostrará su nombre y sus misas preferidas, manteniendo el Directorio como una consulta de solo lectura. La edición continuará realizándose desde **Lectores** y la planificación desde **Asignaciones**.
+- Si todos los lectores activos participan durante el mes, mostrará el mismo estado vacío informativo de la presentación pública.
+
+Las dos presentaciones quedaron solamente documentadas y continúan pendientes; todavía no se modificó el código de la aplicación.
+
 ## Backlog al 1 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
@@ -1519,6 +1557,7 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 
 ### Funcionalidad aplazada
 
+- **Lectores activos sin asignación, vista pública y administrativa.** Los dos diseños se acordaron el 3 de septiembre y continúan sin implementar. El detalle completo, incluidos ubicación, reglas, contenido y estado vacío de cada presentación, está en la sección *Propuesta acordada del 3 de septiembre de 2026*.
 - **Sustitución acordada para una celebración específica.** Diseñada el 4 de agosto, sin implementar; el usuario decidió el 31 de agosto dejarla en el backlog. El diseño completo está en la sección *Propuesta pendiente: sustitución acordada para una celebración específica*.
 - **Misas especiales fuera de la rotación.** El generador trata una celebración única como una misa más y exige cuatro personas exclusivas para ella, restándolas del resto del mes. Apareció con la Misa Domingo 9am de agosto.
 
