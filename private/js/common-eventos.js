@@ -162,6 +162,7 @@ document.addEventListener('click', async e => {
   }
   if (e.target.closest('#printTraditionalReport')) printTraditionalReport();
   if (e.target.closest('#downloadTraditionalImage')) downloadTraditionalImage();
+  if (e.target.closest('#printAvailabilityReport')) printAvailabilityReport();
 });
 $('#upcoming').addEventListener('change', async e => {
   if (!e.target.matches('.admin-replacement') || !e.target.value) return;

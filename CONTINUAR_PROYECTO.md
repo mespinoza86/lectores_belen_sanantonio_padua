@@ -1553,6 +1553,27 @@ Las dos presentaciones ya están implementadas. Se actualizaron `public/app.html
 - `npm test` finalizó con 28 pruebas aprobadas y 0 fallidas.
 - `npm run format:check`, `node --check private/js/common-vistas.js`, `node --check private/js/estadisticas.js` y `git diff --check` finalizaron correctamente.
 
+### Reporte PDF de suplentes y lectores disponibles
+
+- Se agregó en la sección **Reporte** el botón **PDF suplentes y disponibles**, sin sustituir los botones **PDF actual**, **PDF tradicional** e **Imagen tradicional**.
+- La página muestra también una vista previa propia titulada **Suplentes y lectores disponibles** para el mes seleccionado.
+- El documento excluye a todas las personas que aparezcan como titulares durante el mes, incluso si una inconsistencia antigua también las hubiera dejado dentro de una lista de suplentes.
+- La primera sección, **Suplentes asignados**, agrupa por misa a las personas incluidas en `substituteIds`. Como la banca de una misa recurrente se repite en sus distintas fechas, cada suplente se deduplica y aparece una sola vez dentro de su misa.
+- Cada grupo de suplentes muestra el nombre y horario de la misa y una lista numerada de sus integrantes.
+- La segunda sección, **Lectores sin asignación**, incluye solo lectores activos que no sean titulares ni suplentes durante el mes.
+- Para cada lector sin asignación se muestra el nombre, si es **Lector normal** o **Solo suplente**, y las misas que tiene como preferidas.
+- Si no existen suplentes o lectores sin asignación, la sección correspondiente permanece en el documento con un mensaje informativo.
+- El PDF se prepara en A4 vertical mediante el diálogo de impresión del navegador. Durante esa impresión se oculta todo lo demás y se imprime exclusivamente este reporte.
+- La información se calcula con los datos que ya están cargados para el mes; no se agregó ninguna colección ni escritura en MongoDB.
+- Se actualizaron `public/app.html`, `private/js/common-vistas.js`, `private/js/common-eventos.js` y `private/styles.css`.
+
+#### Verificación del nuevo reporte
+
+- Se cargó `http://localhost:3000/reporte.html` con Chrome contra el servidor real y se comprobó que aparecen el botón, el encabezado, las dos secciones y las filas generadas.
+- Se extrajeron del documento real los nombres titulares del mes y se compararon con el contenido del reporte nuevo: ningún titular apareció en la lista de suplentes ni en la de lectores sin asignación.
+- `npm test` finalizó con 28 pruebas aprobadas y 0 fallidas.
+- `npm run format:check`, `node --check` y `git diff --check` finalizaron correctamente.
+
 ## Backlog al 3 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
