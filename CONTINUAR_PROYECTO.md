@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 3 de septiembre de 2026
+Última actualización: 4 de septiembre de 2026
 
 ## Objetivo
 
@@ -1219,7 +1219,7 @@ Se realizó una revisión de solo lectura del servidor, cliente, autenticación,
 
 ## Backlog al 31 de agosto de 2026
 
-> **Superado.** Este backlog quedó en medio del documento al seguir creciendo la bitácora. El vigente está al final, en *Backlog al 3 de septiembre de 2026*. Se conserva como historial.
+> **Superado.** Este backlog quedó en medio del documento al seguir creciendo la bitácora. El vigente está al final, en *Backlog al 4 de septiembre de 2026*. Se conserva como historial.
 
 Lista viva de lo que queda pendiente. Está al final del documento a propósito, para no tener que leer toda la bitácora histórica y poder responder de un vistazo en qué punto está el proyecto.
 
@@ -1574,7 +1574,37 @@ Las dos presentaciones ya están implementadas. Se actualizaron `public/app.html
 - `npm test` finalizó con 28 pruebas aprobadas y 0 fallidas.
 - `npm run format:check`, `node --check` y `git diff --check` finalizaron correctamente.
 
-## Backlog al 3 de septiembre de 2026
+## Actualización del 4 de septiembre de 2026
+
+### Rediseño unificado del reporte de suplentes y disponibles
+
+- El usuario consideró demasiado seco el primer diseño HTML del reporte y solicitó una presentación más elegante, además de poder descargar la misma información como imagen.
+- Se reemplazó la maquetación HTML por una única composición SVG. La vista previa, el PDF y el PNG salen ahora del mismo dibujo, siguiendo el patrón que ya resolvió la sincronización del formato tradicional.
+- El diseño utiliza el verde y dorado de la aplicación, encabezado institucional, mes visible, decoración discreta, indicadores de cantidades, tarjetas por misa, distintivos para **Lector normal** y **Solo suplente**, jerarquía tipográfica y un fondo claro.
+- El encabezado indica expresamente **Sin lectores titulares** y uno de los indicadores mantiene el total de titulares incluidos en cero.
+- Los suplentes continúan agrupados por misa, deduplicados entre las fechas recurrentes y ordenados alfabéticamente dentro de cada grupo.
+- Los lectores sin asignación continúan siendo solamente lectores activos que no aparecen como titulares ni suplentes; sus tarjetas muestran la condición y las misas preferidas.
+- Los nombres y las listas de preferencias ajustan automáticamente su tamaño o se dividen en líneas para no invadir otras columnas.
+- La altura del SVG se calcula según la cantidad real de misas, suplentes y lectores disponibles. El PDF lo ajusta proporcionalmente al área de una A4 vertical.
+
+### Imagen de suplentes y disponibles
+
+- Se agregó el botón **Imagen suplentes y disponibles** junto al botón del PDF.
+- La imagen se genera completamente en el navegador mediante el camino SVG → `Image` → lienzo → PNG y se descarga como `suplentes-y-disponibles-AAAA-MM.png`.
+- Se rasteriza al doble de la resolución del SVG para producir una imagen nítida y apta para compartir.
+- El SVG se entrega a `Image` mediante una URL `data:` en base64, reutilizando la solución compatible con la CSP que ya usa la imagen tradicional; no se agregó `blob:` a `img-src`.
+- Se actualizaron `public/app.html`, `private/js/common-eventos.js`, `private/js/common-vistas.js`, `private/js/common-reporte-tradicional.js` y `private/styles.css`.
+
+### Verificación del rediseño y las exportaciones
+
+- Se ejecutó la página real `http://localhost:3000/reporte.html` con Chrome y la CSP del servidor.
+- El SVG real de septiembre mide 1400 × 1550 unidades; el PDF usa exactamente ese dibujo y queda en 186,00 × 205,93 mm dentro de una A4 vertical.
+- El camino completo de imagen produjo correctamente un lienzo de 2800 × 3100 y preparó el nombre `suplentes-y-disponibles-2026-09.png`.
+- No se produjo ninguna violación de CSP ni error de JavaScript durante la prueba.
+- Se inspeccionó visualmente el PNG resultante: encabezado, contadores, cuatro bloques de misas, cinco suplentes y cinco lectores sin asignación aparecen alineados y legibles.
+- Los archivos temporales de verificación se retiraron del repositorio al terminar.
+
+## Backlog al 4 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
 
