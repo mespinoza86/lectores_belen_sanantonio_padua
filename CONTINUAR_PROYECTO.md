@@ -1611,6 +1611,15 @@ Las dos presentaciones ya están implementadas. Se actualizaron `public/app.html
 - La vista previa, el PDF y la imagen comparten este ajuste mediante su SVG único. Se conserva la información y la exclusión de titulares.
 - Archivo modificado: `private/js/common-reporte-tradicional.js`. El formato tradicional original conserva su diseño.
 
+### Ajuste al formato tabular de la imagen tradicional
+
+- El usuario aportó dos imágenes y aclaró que deseaba la estructura de tablas del reporte tradicional, no tarjetas recoloreadas.
+- Se sustituyó el diseño de tarjetas por tablas de bordes rectos sobre fondo blanco, título institucional centrado, encabezados azules `#3f66a3`, subencabezados celestes `#5d9bd3` y filas alternas blancas y `#d9e3f3`.
+- Suplentes: lista numerada agrupada por misa. Sin asignación: tabla con nombre, condición y misas preferidas; las preferencias largas ocupan varias líneas.
+- Se eliminaron el encabezado decorativo, los círculos y las tarjetas de contadores. PDF, PNG y vista previa usan el mismo SVG tabular.
+- Verificación: sintaxis y diff correctos; ejecución del generador con datos de prueba confirmó ambos grupos y que PDF e imagen comparten el contenido SVG completo.
+- El cambio está en el código local. Una imagen descargada anteriormente o una instancia publicada sin actualizar puede conservar el diseño anterior.
+
 ## Backlog al 4 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.

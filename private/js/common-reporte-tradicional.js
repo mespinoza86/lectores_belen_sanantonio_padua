@@ -373,240 +373,93 @@ function availabilityLinesSvg(lines, x, y, options = {}) {
     .join('');
 }
 
-function availabilitySectionTitleSvg(title, count, top) {
-  const layout = AVAILABILITY_LAYOUT,
-    inner = layout.width - layout.pad * 2;
-  return [
-    `<rect x="${layout.pad}" y="${top}" width="${inner}" height="62" rx="18" fill="#3f66a3"/>`,
-    traditionalTextSvg(title, layout.pad + 24, top + 31, {
-      size: 25,
-      weight: 700,
-      fill: '#fff',
-      anchor: 'start',
-    }),
-    `<circle cx="${layout.pad + inner - 31}" cy="${top + 31}" r="20" fill="#fff"/>`,
-    traditionalTextSvg(String(count), layout.pad + inner - 31, top + 31, {
-      size: 17,
-      weight: 700,
-      fill: '#24405f',
-    }),
-  ].join('');
-}
-
-function availabilitySubstituteCardSvg(group, x, top, width, height) {
-  const parts = [
-    `<rect x="${x}" y="${top}" width="${width}" height="${height}" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
-    `<rect x="${x}" y="${top}" width="8" height="${height}" rx="4" fill="#5d9bd3"/>`,
-    traditionalTextSvg(group.mass.name, x + 28, top + 34, {
-      size: traditionalFitSize(group.mass.name, width - 105, 23),
-      weight: 700,
-      fill: '#24405f',
-      anchor: 'start',
-    }),
-    traditionalTextSvg(massSchedule(group.mass), x + 28, top + 66, {
-      size: 16,
-      fill: '#60748e',
-      anchor: 'start',
-    }),
-    `<circle cx="${x + width - 32}" cy="${top + 34}" r="18" fill="#d9e3f3"/>`,
-    traditionalTextSvg(String(group.readers.length), x + width - 32, top + 34, {
-      size: 15,
-      weight: 700,
-      fill: '#24405f',
-    }),
-  ];
-  group.readers.forEach((reader, index) => {
-    const y = top + 103 + index * 34;
-    parts.push(
-      `<circle cx="${x + 34}" cy="${y}" r="5" fill="#5d9bd3"/>`,
-      traditionalTextSvg(reader.name, x + 51, y, {
-        size: traditionalFitSize(reader.name, width - 76, 20, 600),
-        weight: 600,
-        fill: '#24405f',
-        anchor: 'start',
-      }),
-    );
-  });
-  return parts.join('');
-}
-
-function availabilityReaderCardInfo(item, width) {
-  const preferenceText = item.preferred.length ? item.preferred.join(' · ') : 'Ninguna misa';
-  const lines = availabilityWrapText(preferenceText, width - 56, 18);
-  return { preferenceText, lines, height: 112 + lines.length * 25 };
-}
-
-function availabilityReaderCardSvg(item, info, x, top, width, height) {
-  const onlySubstitute = item.reader.substituteOnly,
-    badgeWidth = onlySubstitute ? 142 : 132,
-    badgeFill = onlySubstitute ? '#d9e3f3' : '#e8f0fa',
-    badgeColor = onlySubstitute ? '#24405f' : '#3f66a3',
-    badgeText = onlySubstitute ? 'SOLO SUPLENTE' : 'LECTOR NORMAL';
-  return [
-    `<rect x="${x}" y="${top}" width="${width}" height="${height}" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
-    traditionalTextSvg(item.reader.name, x + 26, top + 34, {
-      size: traditionalFitSize(item.reader.name, width - badgeWidth - 78, 22),
-      weight: 700,
-      fill: '#24405f',
-      anchor: 'start',
-    }),
-    `<rect x="${x + width - badgeWidth - 22}" y="${top + 18}" width="${badgeWidth}" height="32" rx="16" fill="${badgeFill}"/>`,
-    traditionalTextSvg(badgeText, x + width - badgeWidth / 2 - 22, top + 34, {
-      size: 12,
-      weight: 700,
-      fill: badgeColor,
-    }),
-    traditionalTextSvg('MISAS PREFERIDAS', x + 26, top + 76, {
-      size: 12,
-      weight: 700,
-      fill: '#60748e',
-      anchor: 'start',
-    }),
-    availabilityLinesSvg(info.lines, x + 26, top + 105, { size: 18, fill: '#405775' }),
-  ].join('');
-}
-
 function buildAvailabilityReportSvg(data, fitToPage = false) {
-  const layout = AVAILABILITY_LAYOUT,
-    inner = layout.width - layout.pad * 2,
-    columnWidth = (inner - layout.gap) / 2,
-    parts = [
-      '<defs><linearGradient id="availabilityHeader" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#3f66a3"/><stop offset="1" stop-color="#5d9bd3"/></linearGradient></defs>',
-      `<rect width="${layout.width}" height="100%" fill="#f3f6fb"/>`,
-      `<rect width="${layout.width}" height="${layout.headerH}" fill="url(#availabilityHeader)"/>`,
-      `<circle cx="1265" cy="25" r="170" fill="#ffffff" opacity=".055"/>`,
-      `<circle cx="1310" cy="188" r="88" fill="#5d9bd3" opacity=".18"/>`,
-      `<circle cx="${layout.pad + 25}" cy="62" r="25" fill="#5d9bd3"/>`,
-      traditionalTextSvg('✦', layout.pad + 25, 62, { size: 23, weight: 700, fill: '#fff' }),
-      traditionalTextSvg('DIACONÍA SAN ANTONIO DE BELÉN DE PADUA', layout.pad + 66, 62, {
-        size: 15,
-        weight: 700,
-        fill: '#e8f0fa',
-        anchor: 'start',
-      }),
-      traditionalTextSvg('Suplentes y lectores', layout.pad, 126, {
-        size: 46,
-        weight: 700,
-        fill: '#fff',
-        anchor: 'start',
-      }),
-      traditionalTextSvg('disponibles', layout.pad, 178, {
-        size: 46,
-        weight: 700,
-        fill: '#fff',
-        anchor: 'start',
-      }),
-      `<rect x="${layout.pad}" y="205" width="260" height="35" rx="17.5" fill="#fff" opacity=".14"/>`,
-      traditionalTextSvg(monthLabel(state.month).toUpperCase(), layout.pad + 130, 222.5, {
-        size: 14,
-        weight: 700,
-        fill: '#fff',
-      }),
-      traditionalTextSvg('Sin lectores titulares', layout.width - layout.pad, 219, {
-        size: 17,
-        weight: 600,
-        fill: '#e8f0fa',
-        anchor: 'end',
-      }),
-    ];
-  let top = layout.headerH + 34;
-  const summaryWidth = (inner - layout.gap * 2) / 3;
-  [
-    { label: 'SUPLENTES ASIGNADOS', value: data.substituteIds.size, color: '#5d9bd3' },
-    { label: 'SIN ASIGNACIÓN', value: data.unassigned.length, color: '#3f66a3' },
-    { label: 'TITULARES EN ESTE REPORTE', value: 0, color: '#7894bc' },
-  ].forEach((item, index) => {
-    const x = layout.pad + index * (summaryWidth + layout.gap);
+  const width = 1600,
+    pad = 24,
+    inner = width - pad * 2;
+  const parts = [];
+  let top = 134;
+  const text = (value, x, y, maxWidth, size = 23, fill = '#111', weight = 400, anchor = 'start') =>
+    traditionalTextSvg(value, x, y, {
+      size: traditionalFitSize(value, maxWidth, size, weight),
+      fill,
+      weight,
+      anchor,
+    });
+  const rect = (x, y, w, h, fill) =>
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="#68717b"/>`;
+  parts.push(
+    text(TRADITIONAL_TITLE, width / 2, 42, inner, 38, '#24405f', 700, 'middle'),
+    text(monthLabel(state.month), width / 2, 82, inner, 28, '#3f66a3', 700, 'middle'),
+    text('Suplentes y lectores sin asignación', width / 2, 113, inner, 23, '#24405f', 700, 'middle'),
+  );
+  const heading = label => {
     parts.push(
-      `<rect x="${x}" y="${top}" width="${summaryWidth}" height="100" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
-      `<circle cx="${x + 38}" cy="${top + 35}" r="9" fill="${item.color}"/>`,
-      traditionalTextSvg(String(item.value), x + 62, top + 40, {
-        size: 34,
-        weight: 700,
-        fill: '#24405f',
-        anchor: 'start',
-      }),
-      traditionalTextSvg(item.label, x + 24, top + 77, {
-        size: 12,
-        weight: 700,
-        fill: '#60748e',
-        anchor: 'start',
-      }),
+      rect(pad, top, inner, 54, '#3f66a3'),
+      text(label, width / 2, top + 27, inner - 24, 28, '#fff', 700, 'middle'),
+    );
+    top += 54;
+  };
+  const row = (cells, widths, fill = '#d9e3f3', header = false) => {
+    const lines = cells.map((value, i) =>
+      availabilityWrapText(value, widths[i] - 28, 22, header ? 700 : 400),
+    );
+    const height = Math.max(46, 18 + Math.max(...lines.map(list => list.length)) * 29);
+    let x = pad;
+    cells.forEach((value, i) => {
+      parts.push(rect(x, top, widths[i], height, fill));
+      lines[i].forEach((line, j) =>
+        parts.push(
+          text(
+            line,
+            x + 14,
+            top + 24 + j * 29,
+            widths[i] - 28,
+            22,
+            header ? '#fff' : '#111',
+            header ? 700 : 400,
+          ),
+        ),
+      );
+      x += widths[i];
+    });
+    top += height;
+  };
+  heading('SUPLENTES ASIGNADOS POR MISA');
+  if (!data.substituteGroups.length) row(['Sin suplentes asignados durante este mes.'], [inner], '#eef2f8');
+  data.substituteGroups.forEach(group => {
+    row([`${group.mass.name} · ${massSchedule(group.mass)}`], [inner], '#5d9bd3', true);
+    group.readers.forEach((reader, index) =>
+      row([`${index + 1}. ${reader.name}`], [inner], index % 2 ? '#fff' : '#d9e3f3'),
     );
   });
-  top += 128;
-  parts.push(availabilitySectionTitleSvg('Suplentes asignados por misa', data.substituteIds.size, top));
-  top += 80;
-  if (data.substituteGroups.length) {
-    for (let index = 0; index < data.substituteGroups.length; index += 2) {
-      const pair = data.substituteGroups.slice(index, index + 2),
-        height = Math.max(...pair.map(group => Math.max(145, 122 + group.readers.length * 34)));
-      pair.forEach((group, pairIndex) => {
-        const x = layout.pad + pairIndex * (columnWidth + layout.gap);
-        parts.push(availabilitySubstituteCardSvg(group, x, top, columnWidth, height));
-      });
-      top += height + layout.gap;
-    }
-  } else {
-    parts.push(
-      `<rect x="${layout.pad}" y="${top}" width="${inner}" height="82" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
-      traditionalTextSvg('No hay suplentes asignados durante este mes.', layout.pad + inner / 2, top + 41, {
-        size: 20,
-        fill: '#60748e',
-      }),
-    );
-    top += 104;
-  }
-  top += 8;
-  parts.push(availabilitySectionTitleSvg('Lectores sin asignación', data.unassigned.length, top));
-  top += 80;
-  if (data.unassigned.length) {
-    for (let index = 0; index < data.unassigned.length; index += 2) {
-      const pair = data.unassigned.slice(index, index + 2),
-        infos = pair.map(item => availabilityReaderCardInfo(item, columnWidth)),
-        height = Math.max(...infos.map(info => info.height));
-      pair.forEach((item, pairIndex) => {
-        const x = layout.pad + pairIndex * (columnWidth + layout.gap);
-        parts.push(availabilityReaderCardSvg(item, infos[pairIndex], x, top, columnWidth, height));
-      });
-      top += height + layout.gap;
-    }
-  } else {
-    parts.push(
-      `<rect x="${layout.pad}" y="${top}" width="${inner}" height="82" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
-      traditionalTextSvg(
-        'Todos los lectores activos tienen una asignación este mes.',
-        layout.pad + inner / 2,
-        top + 41,
-        {
-          size: 20,
-          fill: '#60748e',
-        },
-      ),
-    );
-    top += 104;
-  }
-  top += 16;
-  parts.push(
-    `<line x1="${layout.pad}" y1="${top}" x2="${layout.width - layout.pad}" y2="${top}" stroke="#b8c9df"/>`,
-    traditionalTextSvg('Generado desde el planificador de lectores', layout.pad, top + 30, {
-      size: 13,
-      fill: '#60748e',
-      anchor: 'start',
-    }),
-    traditionalTextSvg('Ministerio de Lectores', layout.width - layout.pad, top + 30, {
-      size: 13,
-      weight: 700,
-      fill: '#3f66a3',
-      anchor: 'end',
-    }),
+  top += 24;
+  heading('LECTORES SIN ASIGNACIÓN');
+  const columns = [inner * 0.34, inner * 0.19, inner * 0.47];
+  row(['Lector', 'Condición', 'Misas preferidas'], columns, '#5d9bd3', true);
+  if (!data.unassigned.length)
+    row(['Todos los lectores activos tienen asignación este mes.'], [inner], '#eef2f8');
+  data.unassigned.forEach((item, index) =>
+    row(
+      [
+        item.reader.name,
+        item.reader.substituteOnly ? 'Solo suplente' : 'Lector normal',
+        item.preferred.join(' · ') || 'Ninguna misa',
+      ],
+      columns,
+      index % 2 ? '#fff' : '#d9e3f3',
+    ),
   );
-  const height = Math.round(top + 62),
-    scale = Math.min(layout.pageWidthMm / layout.width, layout.pageHeightMm / height),
-    size = fitToPage
-      ? `width="${(layout.width * scale).toFixed(2)}mm" height="${(height * scale).toFixed(2)}mm"`
-      : `width="${layout.width}" height="${height}"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" ${size} viewBox="0 0 ${layout.width} ${height}">${parts.join('')}</svg>`;
+  top += 30;
+  parts.push(
+    text('Este reporte no incluye lectores titulares.', width / 2, top, inner, 18, '#60748e', 400, 'middle'),
+  );
+  const height = Math.ceil(top + pad);
+  const scale = Math.min(AVAILABILITY_LAYOUT.pageWidthMm / width, AVAILABILITY_LAYOUT.pageHeightMm / height);
+  const size = fitToPage
+    ? `width="${(width * scale).toFixed(2)}mm" height="${(height * scale).toFixed(2)}mm"`
+    : `width="${width}" height="${height}"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" ${size} viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="#fff"/>${parts.join('')}</svg>`;
 }
 
 function renderAvailabilityReport() {
