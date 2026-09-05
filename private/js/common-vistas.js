@@ -424,11 +424,16 @@ function renderCoverage() {
   }
   const monthAssignments = state.assignments.filter(item => item.month === state.month),
     massAssignments = monthAssignments.filter(item => item.massId === mass.id),
-    titularIds = new Set(massAssignments.map(item => item.readerId).filter(Boolean)),
+    titularIds = new Set(monthAssignments.map(item => item.readerId).filter(Boolean)),
+    monthSubstituteIds = new Set(monthAssignments.flatMap(item => item.substituteIds || [])),
     substituteIds = new Set(massAssignments.flatMap(item => item.substituteIds || [])),
     query = coverageSearch.trim().toLocaleLowerCase('es'),
     readers = state.readers.filter(
-      reader => reader.active && (!query || reader.name.toLocaleLowerCase('es').includes(query)),
+      reader =>
+        reader.active &&
+        monthSubstituteIds.has(reader.id) &&
+        !titularIds.has(reader.id) &&
+        (!query || reader.name.toLocaleLowerCase('es').includes(query)),
     ),
     groups = [
       {
@@ -450,16 +455,14 @@ function renderCoverage() {
       },
     ];
   const official = reader =>
-    titularIds.has(reader.id)
-      ? '<span class="coverage-badge titular">Titular de esta misa</span>'
-      : substituteIds.has(reader.id)
-        ? '<span class="coverage-badge substitute">Suplente de esta misa</span>'
-        : '';
+    substituteIds.has(reader.id)
+      ? '<span class="coverage-badge substitute">Suplente de esta misa</span>'
+      : '';
   const card = reader => {
     const placements = readerMonthPlacements(reader.id);
     return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b>${official(reader)}</div><small>${placements.length ? placements.map(esc).join(' · ') : 'Sin asignación en este mes'}</small></article>`;
   };
-  content.innerHTML = `<div class="coverage-selected-summary"><div><span>Titulares de esta misa</span><b>${titularIds.size}</b></div><div><span>Suplentes oficiales</span><b>${substituteIds.size}</b></div><div><span>Lectores que la prefieren</span><b>${groups[0].readers.length}</b></div><div><span>Alternativas posibles</span><b>${groups[1].readers.length}</b></div></div><div class="coverage-groups">${groups
+  content.innerHTML = `<div class="coverage-groups">${groups
     .map(
       group =>
         `<section class="coverage-group ${group.kind}"><div class="coverage-group-head"><h3>${group.title}</h3><span>${group.readers.length}</span></div><div class="coverage-reader-list">${
@@ -472,7 +475,7 @@ function renderCoverage() {
                 )
                 .map(card)
                 .join('')
-            : '<p class="empty">No hay lectores en esta categoría.</p>'
+            : '<p class="empty">No hay suplentes en esta categoría.</p>'
         }</div></section>`,
     )
     .join('')}</div>`;

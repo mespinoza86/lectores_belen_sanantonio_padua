@@ -1620,6 +1620,15 @@ Las dos presentaciones ya están implementadas. Se actualizaron `public/app.html
 - Verificación: sintaxis y diff correctos; ejecución del generador con datos de prueba confirmó ambos grupos y que PDF e imagen comparten el contenido SVG completo.
 - El cambio está en el código local. Una imagen descargada anteriormente o una instancia publicada sin actualizar puede conservar el diseño anterior.
 
+### Cobertura orientada a suplentes del mes
+
+- Por solicitud del usuario, los tres grupos de Cobertura (preferida, alternativa y no puede asistir) muestran únicamente lectores activos incluidos en alguna banca de suplentes del mes consultado. Se excluye cualquier titular del mes, incluso si también figura en una banca.
+- No se usa la casilla Solo suplente para decidir la inclusión: un lector normal asignado como suplente también aparece.
+- El acordeón Lectores sin asignación conserva a los activos sin titularidad ni suplencia mensual, junto con sus preferencias.
+- Se retiraron los cuatro recuadros de resumen. Se conservan la búsqueda, el selector mensual, la misa de origen y la etiqueta Suplente de esta misa.
+- El cambio se aplica a la vista compartida de Cobertura pública y administrativa. Archivo: `private/js/common-vistas.js`.
+- Verificación: ejecución del render con datos de prueba confirmó inclusión de suplentes normales, exclusión de titulares e inactivos, separación de lectores libres y recálculo al cambiar de mes. Sintaxis, formato y diff correctos.
+
 ## Backlog al 4 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
