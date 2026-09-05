@@ -1604,6 +1604,13 @@ Las dos presentaciones ya están implementadas. Se actualizaron `public/app.html
 - Se inspeccionó visualmente el PNG resultante: encabezado, contadores, cuatro bloques de misas, cinco suplentes y cinco lectores sin asignación aparecen alineados y legibles.
 - Los archivos temporales de verificación se retiraron del repositorio al terminar.
 
+### Corrección de la paleta del reporte de suplentes y disponibles
+
+- Por solicitud del usuario se sustituyeron el verde, dorado y fondo crema por los azules del reporte tradicional: azul principal `#3f66a3`, celeste `#5d9bd3` y tonos claros `#d9e3f3`.
+- El cambio abarca encabezado, secciones, tarjetas, contadores, distintivos, textos y fondo del PNG. Los títulos de sección quedan blancos sobre azul para mantener el contraste.
+- La vista previa, el PDF y la imagen comparten este ajuste mediante su SVG único. Se conserva la información y la exclusión de titulares.
+- Archivo modificado: `private/js/common-reporte-tradicional.js`. El formato tradicional original conserva su diseño.
+
 ## Backlog al 4 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.

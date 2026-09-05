@@ -367,7 +367,7 @@ function availabilityWrapText(text, maxWidth, size = 21, weight = 400) {
 }
 
 function availabilityLinesSvg(lines, x, y, options = {}) {
-  const { size = 21, weight = 400, fill = '#52645c', lineHeight = 29, anchor = 'start' } = options;
+  const { size = 21, weight = 400, fill = '#526783', lineHeight = 29, anchor = 'start' } = options;
   return lines
     .map((line, index) => traditionalTextSvg(line, x, y + index * lineHeight, { size, weight, fill, anchor }))
     .join('');
@@ -377,52 +377,52 @@ function availabilitySectionTitleSvg(title, count, top) {
   const layout = AVAILABILITY_LAYOUT,
     inner = layout.width - layout.pad * 2;
   return [
-    `<rect x="${layout.pad}" y="${top}" width="${inner}" height="62" rx="18" fill="#e3eee9"/>`,
+    `<rect x="${layout.pad}" y="${top}" width="${inner}" height="62" rx="18" fill="#3f66a3"/>`,
     traditionalTextSvg(title, layout.pad + 24, top + 31, {
       size: 25,
       weight: 700,
-      fill: '#274f43',
+      fill: '#fff',
       anchor: 'start',
     }),
     `<circle cx="${layout.pad + inner - 31}" cy="${top + 31}" r="20" fill="#fff"/>`,
     traditionalTextSvg(String(count), layout.pad + inner - 31, top + 31, {
       size: 17,
       weight: 700,
-      fill: '#274f43',
+      fill: '#24405f',
     }),
   ].join('');
 }
 
 function availabilitySubstituteCardSvg(group, x, top, width, height) {
   const parts = [
-    `<rect x="${x}" y="${top}" width="${width}" height="${height}" rx="20" fill="#fff" stroke="#dce3de" stroke-width="2"/>`,
-    `<rect x="${x}" y="${top}" width="8" height="${height}" rx="4" fill="#d4a94f"/>`,
+    `<rect x="${x}" y="${top}" width="${width}" height="${height}" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
+    `<rect x="${x}" y="${top}" width="8" height="${height}" rx="4" fill="#5d9bd3"/>`,
     traditionalTextSvg(group.mass.name, x + 28, top + 34, {
       size: traditionalFitSize(group.mass.name, width - 105, 23),
       weight: 700,
-      fill: '#26342f',
+      fill: '#24405f',
       anchor: 'start',
     }),
     traditionalTextSvg(massSchedule(group.mass), x + 28, top + 66, {
       size: 16,
-      fill: '#718078',
+      fill: '#60748e',
       anchor: 'start',
     }),
-    `<circle cx="${x + width - 32}" cy="${top + 34}" r="18" fill="#f5e8c9"/>`,
+    `<circle cx="${x + width - 32}" cy="${top + 34}" r="18" fill="#d9e3f3"/>`,
     traditionalTextSvg(String(group.readers.length), x + width - 32, top + 34, {
       size: 15,
       weight: 700,
-      fill: '#795c20',
+      fill: '#24405f',
     }),
   ];
   group.readers.forEach((reader, index) => {
     const y = top + 103 + index * 34;
     parts.push(
-      `<circle cx="${x + 34}" cy="${y}" r="5" fill="#d4a94f"/>`,
+      `<circle cx="${x + 34}" cy="${y}" r="5" fill="#5d9bd3"/>`,
       traditionalTextSvg(reader.name, x + 51, y, {
         size: traditionalFitSize(reader.name, width - 76, 20, 600),
         weight: 600,
-        fill: '#34463f',
+        fill: '#24405f',
         anchor: 'start',
       }),
     );
@@ -439,15 +439,15 @@ function availabilityReaderCardInfo(item, width) {
 function availabilityReaderCardSvg(item, info, x, top, width, height) {
   const onlySubstitute = item.reader.substituteOnly,
     badgeWidth = onlySubstitute ? 142 : 132,
-    badgeFill = onlySubstitute ? '#f5e8c9' : '#dcebe5',
-    badgeColor = onlySubstitute ? '#795c20' : '#315f50',
+    badgeFill = onlySubstitute ? '#d9e3f3' : '#e8f0fa',
+    badgeColor = onlySubstitute ? '#24405f' : '#3f66a3',
     badgeText = onlySubstitute ? 'SOLO SUPLENTE' : 'LECTOR NORMAL';
   return [
-    `<rect x="${x}" y="${top}" width="${width}" height="${height}" rx="20" fill="#fff" stroke="#dce3de" stroke-width="2"/>`,
+    `<rect x="${x}" y="${top}" width="${width}" height="${height}" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
     traditionalTextSvg(item.reader.name, x + 26, top + 34, {
       size: traditionalFitSize(item.reader.name, width - badgeWidth - 78, 22),
       weight: 700,
-      fill: '#26342f',
+      fill: '#24405f',
       anchor: 'start',
     }),
     `<rect x="${x + width - badgeWidth - 22}" y="${top + 18}" width="${badgeWidth}" height="32" rx="16" fill="${badgeFill}"/>`,
@@ -459,10 +459,10 @@ function availabilityReaderCardSvg(item, info, x, top, width, height) {
     traditionalTextSvg('MISAS PREFERIDAS', x + 26, top + 76, {
       size: 12,
       weight: 700,
-      fill: '#718078',
+      fill: '#60748e',
       anchor: 'start',
     }),
-    availabilityLinesSvg(info.lines, x + 26, top + 105, { size: 18, fill: '#40534b' }),
+    availabilityLinesSvg(info.lines, x + 26, top + 105, { size: 18, fill: '#405775' }),
   ].join('');
 }
 
@@ -471,17 +471,17 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
     inner = layout.width - layout.pad * 2,
     columnWidth = (inner - layout.gap) / 2,
     parts = [
-      '<defs><linearGradient id="availabilityHeader" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#234b40"/><stop offset="1" stop-color="#3b725f"/></linearGradient></defs>',
-      `<rect width="${layout.width}" height="100%" fill="#f7f4ec"/>`,
+      '<defs><linearGradient id="availabilityHeader" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#3f66a3"/><stop offset="1" stop-color="#5d9bd3"/></linearGradient></defs>',
+      `<rect width="${layout.width}" height="100%" fill="#f3f6fb"/>`,
       `<rect width="${layout.width}" height="${layout.headerH}" fill="url(#availabilityHeader)"/>`,
       `<circle cx="1265" cy="25" r="170" fill="#ffffff" opacity=".055"/>`,
-      `<circle cx="1310" cy="188" r="88" fill="#d4a94f" opacity=".18"/>`,
-      `<circle cx="${layout.pad + 25}" cy="62" r="25" fill="#d4a94f"/>`,
+      `<circle cx="1310" cy="188" r="88" fill="#5d9bd3" opacity=".18"/>`,
+      `<circle cx="${layout.pad + 25}" cy="62" r="25" fill="#5d9bd3"/>`,
       traditionalTextSvg('✦', layout.pad + 25, 62, { size: 23, weight: 700, fill: '#fff' }),
       traditionalTextSvg('DIACONÍA SAN ANTONIO DE BELÉN DE PADUA', layout.pad + 66, 62, {
         size: 15,
         weight: 700,
-        fill: '#dcebe5',
+        fill: '#e8f0fa',
         anchor: 'start',
       }),
       traditionalTextSvg('Suplentes y lectores', layout.pad, 126, {
@@ -505,31 +505,31 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
       traditionalTextSvg('Sin lectores titulares', layout.width - layout.pad, 219, {
         size: 17,
         weight: 600,
-        fill: '#f4dfaf',
+        fill: '#e8f0fa',
         anchor: 'end',
       }),
     ];
   let top = layout.headerH + 34;
   const summaryWidth = (inner - layout.gap * 2) / 3;
   [
-    { label: 'SUPLENTES ASIGNADOS', value: data.substituteIds.size, color: '#d4a94f' },
-    { label: 'SIN ASIGNACIÓN', value: data.unassigned.length, color: '#5f927f' },
-    { label: 'TITULARES EN ESTE REPORTE', value: 0, color: '#b36d69' },
+    { label: 'SUPLENTES ASIGNADOS', value: data.substituteIds.size, color: '#5d9bd3' },
+    { label: 'SIN ASIGNACIÓN', value: data.unassigned.length, color: '#3f66a3' },
+    { label: 'TITULARES EN ESTE REPORTE', value: 0, color: '#7894bc' },
   ].forEach((item, index) => {
     const x = layout.pad + index * (summaryWidth + layout.gap);
     parts.push(
-      `<rect x="${x}" y="${top}" width="${summaryWidth}" height="100" rx="20" fill="#fff" stroke="#e1e5e1" stroke-width="2"/>`,
+      `<rect x="${x}" y="${top}" width="${summaryWidth}" height="100" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
       `<circle cx="${x + 38}" cy="${top + 35}" r="9" fill="${item.color}"/>`,
       traditionalTextSvg(String(item.value), x + 62, top + 40, {
         size: 34,
         weight: 700,
-        fill: '#26342f',
+        fill: '#24405f',
         anchor: 'start',
       }),
       traditionalTextSvg(item.label, x + 24, top + 77, {
         size: 12,
         weight: 700,
-        fill: '#718078',
+        fill: '#60748e',
         anchor: 'start',
       }),
     );
@@ -549,10 +549,10 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
     }
   } else {
     parts.push(
-      `<rect x="${layout.pad}" y="${top}" width="${inner}" height="82" rx="20" fill="#fff" stroke="#dce3de" stroke-width="2"/>`,
+      `<rect x="${layout.pad}" y="${top}" width="${inner}" height="82" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
       traditionalTextSvg('No hay suplentes asignados durante este mes.', layout.pad + inner / 2, top + 41, {
         size: 20,
-        fill: '#718078',
+        fill: '#60748e',
       }),
     );
     top += 104;
@@ -573,14 +573,14 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
     }
   } else {
     parts.push(
-      `<rect x="${layout.pad}" y="${top}" width="${inner}" height="82" rx="20" fill="#fff" stroke="#dce3de" stroke-width="2"/>`,
+      `<rect x="${layout.pad}" y="${top}" width="${inner}" height="82" rx="20" fill="#fff" stroke="#b8c9df" stroke-width="2"/>`,
       traditionalTextSvg(
         'Todos los lectores activos tienen una asignación este mes.',
         layout.pad + inner / 2,
         top + 41,
         {
           size: 20,
-          fill: '#718078',
+          fill: '#60748e',
         },
       ),
     );
@@ -588,16 +588,16 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
   }
   top += 16;
   parts.push(
-    `<line x1="${layout.pad}" y1="${top}" x2="${layout.width - layout.pad}" y2="${top}" stroke="#d8ded9"/>`,
+    `<line x1="${layout.pad}" y1="${top}" x2="${layout.width - layout.pad}" y2="${top}" stroke="#b8c9df"/>`,
     traditionalTextSvg('Generado desde el planificador de lectores', layout.pad, top + 30, {
       size: 13,
-      fill: '#718078',
+      fill: '#60748e',
       anchor: 'start',
     }),
     traditionalTextSvg('Ministerio de Lectores', layout.width - layout.pad, top + 30, {
       size: 13,
       weight: 700,
-      fill: '#315f50',
+      fill: '#3f66a3',
       anchor: 'end',
     }),
   );
@@ -645,7 +645,7 @@ function downloadAvailabilityImage() {
     canvas.width = image.width * scale;
     canvas.height = image.height * scale;
     const context = canvas.getContext('2d');
-    context.fillStyle = '#f7f4ec';
+    context.fillStyle = '#f3f6fb';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(blob => {
