@@ -1759,14 +1759,33 @@ Resultados:
 - **`scripts/` acumula migraciones de un solo uso.** Cuatro de los seis scripts sirvieron únicamente para agosto de 2026. Conviene moverlos a `scripts/historicos/` para que no se confundan con herramientas vivas.
 - **El `.env` local tiene `NODE_ENV=production`.** Funciona en `localhost` porque los navegadores tratan `localhost` como contexto seguro y aceptan la cookie `Secure`, pero implica que cualquier prueba local corre con cookie `Secure` y cabecera HSTS puestas. Conviene tenerlo presente al depurar.
 
+### Cierre del primer tramo del 22 de septiembre
+
+- Commit `fb95af6`, en `origin/main` y desplegado: la corrección del rechazo más toda la revisión en esta bitácora. Árbol limpio y `main` sincronizada.
+- El usuario confirmó que **Render ya está configurado**, así que ese pendiente de seguridad queda resuelto. La **rotación de la credencial de Atlas sigue pendiente** y pasa a ser el único bloqueo de seguridad para producción.
+- La planificación de noviembre quedó generada y verificada; septiembre no se tocó.
+
+### Decisión sobre la base de datos de las pruebas de integración
+
+Antes de escribir las pruebas de las reglas de asignación había que elegir contra qué base corren. Se plantearon tres caminos:
+
+| Camino | Por qué sí | Por qué no |
+| --- | --- | --- |
+| **Mongo en memoria** (elegido) | Semántica real de MongoDB, sin red ni credenciales, imposible que toque datos de la parroquia | Una dependencia de desarrollo nueva y una descarga de binario la primera vez |
+| Base aparte en el mismo Atlas | Sin dependencias nuevas, Atlas auténtico | Necesita red y credenciales, no corre en CI sin secretos, y vive en el mismo cluster que producción |
+| Doble inyectado de la base | Sin dependencias ni red, muy rápido | Un falso no reproduce transacciones ni el comportamiento real de `$pull` y los filtros, que es justo donde vivió el bug del rechazo: **no lo habría atrapado** |
+
+- **El usuario eligió Mongo en memoria**, con `mongodb-memory-server` en su variante de conjunto de réplica, que es la que permite que `withTransaction` funcione. El código usa transacciones en la generación aleatoria, en Asignar no asignados, en el rechazo y en la edición de suplentes, así que un mongod suelto no serviría.
+- No hace falta cambiar `server.js`: las pruebas actuales ya importan `server` y llaman `server.listen(0)` sin tocar Mongo, y `PORT`, `MONGODB_URI` y `MONGODB_DB` se leen al cargar el módulo, de modo que la prueba puede fijarlos antes del `require` y después llamar a `start()`.
+
 ## Backlog al 22 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
 
 ### Seguridad, antes de considerarlo listo para producción
 
-- **Rotar la credencial de MongoDB** compartida en julio y actualizarla en `.env` y en las variables de entorno de Render. **Solo puede hacerlo el usuario**, desde Atlas. Es el pendiente más antiguo y el de mayor riesgo. *En curso por el usuario desde el 22 de septiembre.*
-- **Confirmar `NODE_ENV=production` y HTTPS** en el alojamiento. De eso dependen el atributo `Secure` de la cookie y la cabecera HSTS. *En curso por el usuario desde el 22 de septiembre.*
+- **Rotar la credencial de MongoDB** compartida en julio y actualizarla en `.env` y en las variables de entorno de Render. **Solo puede hacerlo el usuario**, desde Atlas. Es el pendiente más antiguo y el de mayor riesgo. **Sigue pendiente al 22 de septiembre**, confirmado por el usuario esa misma tarde: con Render ya resuelto, es el único pendiente de seguridad que bloquea el paso a producción.
+- *Resuelto el 22 de septiembre:* **`NODE_ENV=production` y HTTPS en el alojamiento**, confirmado por el usuario. De eso dependen el atributo `Secure` de la cookie y la cabecera HSTS. No se comprobó contra la URL desplegada porque esa dirección no está registrada en el repositorio; conviene anotarla para poder verificar las cabeceras de producción en el futuro.
 - **Decidir si las notas de los lectores siguen siendo públicas.** Pendiente desde julio. La corrección es una línea en `publicDoc`; falta la decisión, no el código.
 - **Decidir si el repositorio público debe seguir conteniendo `data/lectores_reales_revision.csv`** con los 30 nombres reales y su disponibilidad.
 - *Resuelto el 1 de septiembre:* el limitador del acceso administrativo.
