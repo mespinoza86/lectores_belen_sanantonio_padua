@@ -1453,7 +1453,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 module.exports = {
-  server, start, body, securityHeaders, createAdminToken, adminSession,
+  server, start, shutdown, body, securityHeaders, createAdminToken, adminSession,
   legacyReaderPasswordHash, readerPasswordHash, readerPasswordMatches,
   adminLoginBlockMs, publicDoc, publicReader, publicAssignment, assignmentQuery, previousMonth, costaRicaDateTime, validateNews,
   massOccurrences, massesForMonth, assertReadersBelongToSingleMass

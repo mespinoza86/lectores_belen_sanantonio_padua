@@ -1776,7 +1776,51 @@ Antes de escribir las pruebas de las reglas de asignación había que elegir con
 | Doble inyectado de la base | Sin dependencias ni red, muy rápido | Un falso no reproduce transacciones ni el comportamiento real de `$pull` y los filtros, que es justo donde vivió el bug del rechazo: **no lo habría atrapado** |
 
 - **El usuario eligió Mongo en memoria**, con `mongodb-memory-server` en su variante de conjunto de réplica, que es la que permite que `withTransaction` funcione. El código usa transacciones en la generación aleatoria, en Asignar no asignados, en el rechazo y en la edición de suplentes, así que un mongod suelto no serviría.
-- No hace falta cambiar `server.js`: las pruebas actuales ya importan `server` y llaman `server.listen(0)` sin tocar Mongo, y `PORT`, `MONGODB_URI` y `MONGODB_DB` se leen al cargar el módulo, de modo que la prueba puede fijarlos antes del `require` y después llamar a `start()`.
+- Casi no hace falta tocar `server.js`: `PORT`, `MONGODB_URI` y `MONGODB_DB` se leen al cargar el módulo, así que la prueba puede fijarlos antes del `require` y después llamar a `start()`. *Al implementarlo apareció una excepción: hubo que exportar `shutdown`, detallada en la sección siguiente.*
+
+### Pruebas de integración de las reglas de asignación
+
+Era el pendiente de calidad más antiguo y el único sin cobertura. Ya está implementado.
+
+#### Montaje
+
+- Se agregó `mongodb-memory-server` como dependencia de desarrollo, en la variante `MongoMemoryReplSet`. El conjunto de réplica no es un capricho: `withTransaction` no funciona contra un `mongod` suelto, y el código usa transacciones en la generación aleatoria, en Asignar no asignados, en el rechazo y en la edición de suplentes.
+- Arranca en unos 740 ms, corre sin red ni credenciales y no puede tocar la base de la parroquia, porque la URI que recibe el servidor es la del proceso en memoria.
+- Las pruebas viven en `test/asignaciones.test.js`. `npm test` pasó a ser `node --test test/server.test.js test/asignaciones.test.js`, con los dos archivos nombrados de forma explícita en vez de un directorio, que Node interpretaba como un módulo.
+- **Todo se ejercita por HTTP contra el servidor real**, no llamando a funciones internas, para que la prueba recorra el mismo camino que la aplicación: sesión administrativa incluida.
+- El único cambio que hizo falta en `server.js` fue **exportar `shutdown`**, para que la prueba pueda cerrar el servidor y el cliente de MongoDB al terminar y el proceso no quede colgado. No se tocó ninguna lógica.
+- No hizo falta nada más porque `PORT`, `MONGODB_URI` y `MONGODB_DB` se leen al cargar el módulo: la prueba los fija antes del `require` y después llama a `start()`. `MONGODB_HOSTS` se vacía para que no se aplique el rodeo de Atlas y la URI de memoria se use tal cual. `dotenv` no pisa variables ya definidas, así que el `.env` real no interfiere.
+- El puerto se obtiene sondeando uno libre con `net`, porque `PORT=0` no sirve: `Number('0') || 3000` cae en 3000.
+
+#### Las once pruebas nuevas
+
+| Prueba | Qué fija |
+| --- | --- |
+| La generación aleatoria cubre el mes y respeta una misa por persona | Un documento por puesto, ningún puesto sin titular, la invariante en OK y nadie repartido entre dos misas |
+| Sin lectores suficientes la generación aborta y no deja nada escrito | El rechazo devuelve 400 y **la transacción no deja restos** |
+| La generación no exige puestos de una misa que no se celebra en el mes | Una misa especial de junio no estorba a la planificación de enero |
+| **Al rechazar, el suplente que asciende sale de la banca de TODAS las fechas** | Regresión directa del fallo corregido hoy |
+| Un rechazo sin suplente disponible deja el puesto pendiente de reemplazo | `readerId` nulo, estado `needs_replacement` y el titular original conservado |
+| Una decisión ya registrada no se puede revertir | La segunda confirmación responde 400 |
+| Asignar no asignados llena solo los huecos y no toca lo ya confirmado | Una asignación confirmada sobrevive intacta |
+| Al ascender a un suplente, Asignar no asignados lo retira de toda la banca | La corrección del 1 de septiembre queda fijada |
+| Poner a alguien de suplente lo retira de la banca de otra misa del mes | El traslado entre bancas |
+| Un titular del mes no puede quedar además como suplente | La ruta devuelve 400 |
+| Las rutas de planificación exigen sesión administrativa | Las tres responden 401 sin cookie |
+
+#### La prueba de regresión se comprobó en los dos sentidos
+
+Una prueba que pasa con el arreglo y sin él no vale nada, así que se reintrodujo el fallo a propósito:
+
+- Con el `updateMany` del rechazo devuelto a `{ massId, month, date }`, la suite queda en **38 aprobadas y 1 fallida**, y la que falla es exactamente *"al rechazar, el suplente que asciende sale de la banca de TODAS las fechas"*, con el mensaje *"el ascendido no debe quedar en ninguna banca, ni la de su propia misa"*.
+- Restaurada la corrección, el `server.js` resultante es **byte a byte idéntico** al que se había verificado antes de reintroducir el fallo, y la suite vuelve a **39 aprobadas y 0 fallidas**.
+
+#### Verificación
+
+- `npm test`: **39 aprobadas, 0 fallidas** (28 anteriores más 11 nuevas).
+- `npm run format:check` limpio, `node --check` correcto en todos los JavaScript y `git diff --check` sin errores.
+- **La base de la parroquia quedó intacta**, comprobado después de correr la suite contra el servidor real: 43 lectores, 33 activos, 6 misas activas, agosto 120, septiembre 92, octubre 104 y noviembre 112. Las pruebas escriben únicamente en la base `lectores_pruebas` del proceso en memoria.
+- Detalle del montaje, anotado por si reaparece: `prettier --write .` dejó `test/asignaciones.test.js` en una forma que `prettier --check` seguía rechazando. Se resolvió escribiendo directamente la salida de `prettier <archivo>` sobre el archivo.
 
 ## Backlog al 22 de septiembre de 2026
 
@@ -1798,7 +1842,7 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 
 ### Calidad
 
-- **Pruebas de integración de las reglas de asignación**: exclusividad mensual, propagación por alcance, traslado de suplentes y transacciones. Es la parte más delicada del sistema y la única sin cobertura. Subió de prioridad el 22 de septiembre: el fallo del rechazo corregido ese día es exactamente lo que esas pruebas habrían atrapado, y su corrección tampoco pudo dejar prueba automatizada por la misma carencia. Necesita una base de datos de prueba.
+- *Resuelto el 22 de septiembre:* **pruebas de integración de las reglas de asignación**. Once pruebas nuevas contra un MongoDB en memoria con conjunto de réplica, todas por HTTP contra el servidor real. Cubren exclusividad mensual, generación aleatoria y su reversión transaccional, rechazo con y sin suplente, Asignar no asignados, traslado de suplentes y permisos. La de regresión del rechazo se comprobó en los dos sentidos. Queda fuera de cobertura la propagación por alcance de los cambios manuales, que sigue siendo un buen siguiente paso.
 - **Verificar la sospecha sobre la ruta `replacement`** descrita en la sesión del 22 de septiembre.
 - **Escapar en `emptyCard` y en los tres nombres de misa de `common-vistas.js`**, por consistencia con el resto del cliente.
 - **Mover las migraciones de un solo uso a `scripts/historicos/`.**
