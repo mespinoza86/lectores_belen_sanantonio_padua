@@ -975,10 +975,13 @@ async function api(req, res, url) {
         return json(res, 200, publicDoc(updated));
       }
       if (input.action !== 'decline') throw new Error('Acción inválida');
-      const sameCelebration = await database.collection('assignments').find({
-        massId: assignment.massId, month: assignment.month, date: assignment.date
+      // Titulares de la misa en TODO el mes, no solo los de esta fecha: la regla de una
+      // misa por persona se evalúa sobre el mes completo, y la rotación reparte a la misma
+      // persona entre varias fechas de la misma misa.
+      const sameMassAssignments = await database.collection('assignments').find({
+        massId: assignment.massId, month: assignment.month
       }).toArray();
-      const titularIds = new Set(sameCelebration.map(item => item.readerId).filter(Boolean));
+      const titularIds = new Set(sameMassAssignments.map(item => item.readerId).filter(Boolean));
       const otherMassAssignments = await database.collection('assignments').find({
         month: assignment.month, massId: { $ne: assignment.massId }
       }).toArray();
@@ -1009,8 +1012,11 @@ async function api(req, res, url) {
           );
           if (!updated) throw new Error('Esta decisión ya fue registrada y no se puede revertir');
           if (replacementId) {
+            // La banca se repite en cada fecha de la misa: al ascender a titular hay que
+            // retirarlo de todas, no solo de esta celebración. Dejarlo en las demás viola
+            // la regla de una misa por persona y aborta el siguiente Asignar no asignados.
             await database.collection('assignments').updateMany(
-              { massId: assignment.massId, month: assignment.month, date: assignment.date },
+              { massId: assignment.massId, month: assignment.month },
               { $pull: { substituteIds: replacementId } },
               { session: mongoSession }
             );

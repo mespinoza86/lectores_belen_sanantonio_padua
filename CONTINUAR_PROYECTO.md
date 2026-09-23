@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 4 de septiembre de 2026
+Última actualización: 22 de septiembre de 2026
 
 ## Objetivo
 
@@ -1631,6 +1631,8 @@ Las dos presentaciones ya están implementadas. Se actualizaron `public/app.html
 
 ## Backlog al 4 de septiembre de 2026
 
+> **Superado.** El backlog vigente está al final del documento, en *Backlog al 22 de septiembre de 2026*. Se conserva como historial.
+
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
 
 ### Seguridad, antes de considerarlo listo para producción
@@ -1656,3 +1658,137 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 ### Decisión abierta
 
 - **Tamaño de letra del PDF tradicional.** Al caber el mes completo en una hoja, el texto se imprime a unos 6 pt. Si resulta pequeño en papel, se vuelve a dos hojas horizontales con letra casi del doble: es cambiar `pageWidthMm` y `pageHeightMm` y volver a repartir por altura, algo que ya estuvo implementado y está descrito en la sección del SVG.
+
+## Continuidad retomada el 22 de septiembre de 2026
+
+### Revisión completa solicitada
+
+- Se leyó `CONTINUAR_PROYECTO.md` completo, 1.658 líneas, y se revisó el proyecto entero: `server.js`, los seis módulos de `private/js`, las páginas de `public`, los scripts de `scripts/` y la suite de pruebas.
+- Además de la revisión estática se levantó el servidor real contra MongoDB para contrastar el código con el estado verdadero de los datos.
+
+### Estado verificado al abrir la sesión
+
+- Rama `main` sincronizada con `origin/main`, árbol de trabajo limpio, commit más reciente `a0addaf`.
+- `npm test`: 28 aprobadas, 0 fallidas. `npm run format:check` limpio. `node --check` correcto en `server.js`, los JavaScript de `private/js`, la suite y los scripts.
+- `npm audit --omit=dev`: 0 vulnerabilidades conocidas.
+
+### Los datos habían cambiado desde el cierre del 1 de septiembre
+
+Lo observado contra MongoDB el 22 de septiembre, distinto de lo que dejó escrito la sesión anterior:
+
+| Dato | Cierre del 1 de septiembre | Observado el 22 de septiembre |
+| --- | --- | --- |
+| Lectores | 41 (32 activos, 9 inactivos) | **43 (33 activos, 10 inactivos)** |
+| Agosto | 120 asignaciones | 120 asignaciones |
+| Septiembre | 96 asignaciones, 0 huecos | **92 de 96 esperadas, 4 huecos** |
+| Octubre | 104 asignaciones | 104 asignaciones, completo |
+| Noviembre | sin planificar | sin planificar |
+
+- Septiembre tenía además 12 asignaciones confirmadas y 80 pendientes.
+- Los cuatro huecos eran todos de la **Misa domingo 7:00 a. m.**, uno por fecha y cada vez de una función distinta: Segunda lectura el 6, Moniciones el 13, Primera lectura el 20 y Salmo el 27.
+- Ese patrón, una función diferente cada domingo, es la firma de **una sola persona eliminada**: es la rotación de un titular a lo largo del mes. `DELETE /api/readers` borra todas las asignaciones del lector en vez de dejar el puesto vacante, tal como ya se había anotado el 1 de septiembre con el caso de la lectora Ana. Volvió a ocurrir.
+- Tanto septiembre como octubre pasaban la validación `assertReadersBelongToSingleMass`, así que no había corrupción de la regla de una misa por persona.
+
+### Hallazgo: el rechazo de asistencia dejaba al suplente ascendido en la banca de las demás fechas
+
+- Es el mismo fallo que el 1 de septiembre se corrigió en `fillUnassigned`, pero que **nunca se aplicó al camino del rechazo**.
+- Al rechazar una asignación, el servidor asciende al primer suplente disponible y lo retira de la banca con un `updateMany` filtrado por `{ massId, month, date }`, es decir **solo esa celebración**. Como la banca de una misa recurrente se repite en cada una de sus fechas, el suplente ascendido seguía figurando como suplente en las demás fechas de su propia misa.
+- Eso viola la regla acordada: quien es titular no puede estar en ninguna banca, ni siquiera la de su propia misa.
+- Consecuencia concreta y comprobada: el estado resultante es rechazado por `assertReadersBelongToSingleMass`, que es la última red de `fillUnassigned`. Después de un rechazo, **el siguiente "Asignar no asignados" del mes aborta entero**, con el mensaje *"La planificación intentó usar a un titular como suplente"*, que no explica que la causa fue un rechazo anterior.
+- No había daño en los datos vivos: septiembre y octubre pasaban la validación, así que ningún rechazo había pasado todavía por este camino con banca compartida.
+
+### Corrección aplicada
+
+Dos cambios en `server.js`, ambos en la ruta `POST /api/confirmations/:id` con `action: 'decline'`:
+
+- El `updateMany` que retira al suplente ascendido pasa de filtrar por `{ massId, month, date }` a filtrar por `{ massId, month }`. Ahora sale de la banca de **todas** las fechas de la misa, no solo de la celebración que rechazó.
+- `titularIds`, el conjunto que impide ascender a alguien que ya sirve, se construía únicamente con los titulares de esa fecha. Ahora se construye con los titulares de la misa en **todo el mes**, que es el alcance real de la regla de una misa por persona, porque la rotación reparte a la misma persona entre varias fechas de la misma misa. La constante `sameCelebration` pasó a llamarse `sameMassAssignments`.
+
+### Verificación contra MongoDB real, en los dos sentidos
+
+No bastaba con leer el código, así que se construyó un arnés que ejercita la ruta HTTP real contra la base real:
+
+- Crea datos desechables en el mes **2099-01**, imposible de colisionar con ninguna planificación viva: una misa temporal inactiva, tres lectores temporales y cuatro asignaciones repartidas en dos fechas, con la misma banca de un solo suplente repetida en ambas, igual que en una misa recurrente auténtica.
+- Lanza el rechazo real por HTTP con la contraseña del lector y después comprueba el estado directamente en MongoDB.
+- Borra todo en un bloque `finally`, ocurra lo que ocurra, y cuenta los documentos restantes al terminar.
+
+Resultados:
+
+| Código | Resultado |
+| --- | --- |
+| **Con la corrección** | `RESULTADO: PASA`. El suplente queda como titular de la primera fecha y la banca queda vacía en las cuatro asignaciones. `assertReadersBelongToSingleMass`: OK. |
+| **Sin la corrección** (`a0addaf`) | `RESULTADO: FALLA`. Las dos asignaciones de la segunda fecha conservaban al suplente en la banca, y la invariante se violaba con *"La planificación intentó usar a un titular como suplente"*. |
+
+- Para la segunda pasada se repuso el `server.js` original con `git show HEAD:server.js`, se reinició el servidor y se volvió a correr el mismo arnés sin tocarlo, para que la única variable fuese el código.
+- En ambas ejecuciones quedaron **0 documentos temporales** en la base.
+- `npm test` después de restaurar la corrección: 28 aprobadas, 0 fallidas. `node --check server.js` correcto.
+- Siguiendo el precedente del 1 de septiembre, el arnés **no se dejó en el repositorio**: escribe en la base de producción y no debe quedar al alcance de una ejecución accidental.
+
+### Limitación honesta de esta corrección
+
+- **No hay prueba automatizada de regresión de este camino.** La suite no tiene base de datos de prueba y `database` es una variable de módulo que la prueba no puede sustituir, así que la ruta del rechazo no es verificable sin MongoDB. La comprobación de esta sesión fue real y concluyente, pero es manual y no se repetirá sola.
+- Esto es exactamente el pendiente *"Pruebas de integración de las reglas de asignación"* que arrastra el backlog. El fallo de hoy es su mejor argumento: una corrección aplicada a un camino y no al otro es justo lo que esas pruebas atraparían.
+
+### Planificación de noviembre de 2026 generada
+
+- Noviembre estaba sin planificar. Se comprobó la capacidad antes de generar: 6 misas activas con fecha en el mes, 28 celebraciones y 112 puestos de titular; la regla de una persona por misa exige 24 titulares más al menos 6 suplentes, es decir 30 personas, y hay 33 activas. Margen 3.
+- Se generó con `POST /api/random-assignments` desde una sesión administrativa real.
+- Resultado verificado: **112 documentos de 112 esperados, 0 puestos sin titular, 33 personas distintas participando**, y `assertReadersBelongToSingleMass` en OK.
+- Reparto por misa, las seis con sus cuatro titulares:
+
+| Misa | Fechas | Titulares | Suplentes |
+| --- | --- | --- | --- |
+| Misa sábado 4:00 p. m. | 4 | 4 | 2 |
+| Misa sábado 6:00 p. m. | 4 | 4 | 1 |
+| Misa domingo 7:00 a. m. | 5 | 4 | 1 |
+| Misa domingo 11:00 a. m. | 5 | 4 | 1 |
+| Misa domingo 4:00 p. m. | 5 | 4 | 2 |
+| Misa domingo 6:00 p. m. | 5 | 4 | 2 |
+
+### Septiembre: decisión de no rellenar los cuatro huecos
+
+- Se le planteó al usuario que, al ser hoy 22 de septiembre, tres de los cuatro huecos (6, 13 y 20) corresponden a domingos **ya celebrados** y solo el del 27 está por venir. Rellenar los tres primeros dejaría constancia de que alguien leyó un día en que no leyó.
+- **El usuario decidió no rellenar ninguno por ahora** y revisar septiembre por su cuenta desde la aplicación. No se tocó ninguna asignación de septiembre durante esta sesión.
+
+### Hallazgos adicionales de la revisión, anotados y sin corregir
+
+- **Las notas de los lectores siguen siendo públicas.** `publicDoc(document, true)` elimina `phone`, `mustChangePassword`, `passwordChangedAt` y `passwordResetAt`, pero **no `notes`**. Es el pendiente que arrastra el backlog desde julio, ahora con la ubicación exacta. Hoy no hay fuga real porque ningún lector tiene notas escritas: el camino está abierto, el dato no existe.
+- **El repositorio de GitHub es público.** Comprobado: la API de GitHub responde 200 sobre el repositorio sin autenticación. Eso significa que `data/lectores_reales_revision.csv`, con los **30 nombres reales y su disponibilidad horaria**, está visible en internet abierto. No contiene teléfonos: la columna existe y está vacía en las 30 filas. El 31 de agosto se decidió expresamente conservar ese archivo rastreado; queda anotado por si aquella decisión se tomó dando por hecho que el repositorio era privado.
+- **`emptyCard` no escapa su contenido.** En `private/js/common-ui.js` interpola título y copia directamente dentro de `innerHTML`, y hay tres nombres de misa más que entran sin `esc()` en `private/js/common-vistas.js`. El resto del cliente sí usa `esc()` de forma consistente. **No es XSS explotable**: la CSP del servidor es `script-src 'self'` sin `unsafe-inline`, así que ni un script inyectado ni un manejador en línea llegarían a ejecutarse. Es una inconsistencia de estilo defensivo, no un agujero.
+- **Sospecha sobre la ruta `replacement`, sin comprobar.** Su verificación `otherUse` busca al lector en `substituteIds` de todo el mes excluyendo solo el documento actual. Como la banca se replica en los cuatro documentos de una misma celebración, promover a un suplente desde esa ruta parecería rebotar siempre con *"Cada persona solo puede pertenecer a una misa durante el mes"*, lo que dejaría muerto el `$pull` que viene justo después. No se comprobó contra la base; queda como sospecha a verificar, no como hecho.
+- **`scripts/` acumula migraciones de un solo uso.** Cuatro de los seis scripts sirvieron únicamente para agosto de 2026. Conviene moverlos a `scripts/historicos/` para que no se confundan con herramientas vivas.
+- **El `.env` local tiene `NODE_ENV=production`.** Funciona en `localhost` porque los navegadores tratan `localhost` como contexto seguro y aceptan la cookie `Secure`, pero implica que cualquier prueba local corre con cookie `Secure` y cabecera HSTS puestas. Conviene tenerlo presente al depurar.
+
+## Backlog al 22 de septiembre de 2026
+
+Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
+
+### Seguridad, antes de considerarlo listo para producción
+
+- **Rotar la credencial de MongoDB** compartida en julio y actualizarla en `.env` y en las variables de entorno de Render. **Solo puede hacerlo el usuario**, desde Atlas. Es el pendiente más antiguo y el de mayor riesgo. *En curso por el usuario desde el 22 de septiembre.*
+- **Confirmar `NODE_ENV=production` y HTTPS** en el alojamiento. De eso dependen el atributo `Secure` de la cookie y la cabecera HSTS. *En curso por el usuario desde el 22 de septiembre.*
+- **Decidir si las notas de los lectores siguen siendo públicas.** Pendiente desde julio. La corrección es una línea en `publicDoc`; falta la decisión, no el código.
+- **Decidir si el repositorio público debe seguir conteniendo `data/lectores_reales_revision.csv`** con los 30 nombres reales y su disponibilidad.
+- *Resuelto el 1 de septiembre:* el limitador del acceso administrativo.
+
+### Funcionalidad aplazada
+
+- **Sustitución acordada para una celebración específica.** Diseñada el 4 de agosto, sin implementar; el usuario decidió el 31 de agosto dejarla en el backlog. El diseño completo está en la sección *Propuesta pendiente: sustitución acordada para una celebración específica*.
+- **Misas especiales fuera de la rotación.** El generador trata una celebración única como una misa más y exige cuatro personas exclusivas para ella, restándolas del resto del mes.
+- **Eliminar un lector borra su historial completo.** `DELETE /api/readers` elimina todas sus asignaciones de todos los meses, incluidos los pasados, en vez de dejar el puesto vacante. Ya provocó el agujero de agosto con la lectora Ana y los cuatro huecos de septiembre detectados el 22 de septiembre. Convendría que eliminar vaciara el puesto y conservara el documento, o que la interfaz empujara claramente hacia desactivar en vez de eliminar.
+
+### Calidad
+
+- **Pruebas de integración de las reglas de asignación**: exclusividad mensual, propagación por alcance, traslado de suplentes y transacciones. Es la parte más delicada del sistema y la única sin cobertura. Subió de prioridad el 22 de septiembre: el fallo del rechazo corregido ese día es exactamente lo que esas pruebas habrían atrapado, y su corrección tampoco pudo dejar prueba automatizada por la misma carencia. Necesita una base de datos de prueba.
+- **Verificar la sospecha sobre la ruta `replacement`** descrita en la sesión del 22 de septiembre.
+- **Escapar en `emptyCard` y en los tres nombres de misa de `common-vistas.js`**, por consistencia con el resto del cliente.
+- **Mover las migraciones de un solo uso a `scripts/historicos/`.**
+- **Retirar el CSS muerto del formato tradicional.** `traditional-mass`, `traditional-column` y `traditional-reserves` quedaron sin uso al pasar la vista previa a SVG. Cuidado: el bloque que los contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí hace falta. La hoja está minificada y merece una revisión visual aparte.
+- **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado.
+- **Decidir si Inicio debe montar la sección `assign` oculta.** Tras unificar la plantilla, `renderAssignments()` se ejecuta también en Inicio; no es visible, pero es trabajo de render innecesario.
+- **`Evelia Ramirez` sin tilde.** Ni el formulario ni la base la traían. Si el apellido correcto es `Ramírez`, hay que corregirlo a mano.
+
+### Decisión abierta
+
+- **Tamaño de letra del PDF tradicional.** Al caber el mes completo en una hoja, el texto se imprime a unos 6 pt. Si resulta pequeño en papel, se vuelve a dos hojas horizontales con letra casi del doble: es cambiar `pageWidthMm` y `pageHeightMm` y volver a repartir por altura, algo que ya estuvo implementado y está descrito en la sección del SVG.
+- **Los cuatro huecos de septiembre de 2026.** El usuario decidió el 22 de septiembre no rellenarlos por ahora. Solo el del domingo 27 (Salmo, Misa domingo 7:00 a. m.) seguía siendo servible en esa fecha.
