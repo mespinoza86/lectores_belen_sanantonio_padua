@@ -1822,6 +1822,63 @@ Una prueba que pasa con el arreglo y sin él no vale nada, así que se reintrodu
 - **La base de la parroquia quedó intacta**, comprobado después de correr la suite contra el servidor real: 43 lectores, 33 activos, 6 misas activas, agosto 120, septiembre 92, octubre 104 y noviembre 112. Las pruebas escriben únicamente en la base `lectores_pruebas` del proceso en memoria.
 - Detalle del montaje, anotado por si reaparece: `prettier --write .` dejó `test/asignaciones.test.js` en una forma que `prettier --check` seguía rechazando. Se resolvió escribiendo directamente la salida de `prettier <archivo>` sobre el archivo.
 
+### Dejar el repositorio listo para desplegar desde Render
+
+Tras agregar las pruebas de integración se revisó qué podía romper el despliegue y se cerró el único riesgo encontrado.
+
+#### Lo que no podía romper nada, comprobado
+
+- **El cambio en `server.js` es una sola línea**: agregar `shutdown` a `module.exports`. En producción la aplicación corre como punto de entrada, así que `module.exports` no lo lee nadie. Es una clave añadida a un objeto y no puede tapar ninguna otra.
+- **Las dependencias de producción no se movieron.** Comparando el lock antes y después: `mongodb` 6.21.0, `bcrypt` 6.0.0 y `dotenv` 17.4.2, idénticas.
+- **La dependencia de desarrollo no llega a producción.** Con `NODE_ENV=production`, `npm install` omite `mongodb-memory-server` y `prettier`: 42 paquetes fuera, y ninguna descarga del binario de mongod durante la construcción.
+
+#### El riesgo real, y cómo se cerró
+
+`npm test` pasó a incluir el archivo de integración, que requiere `mongodb-memory-server`. En una instalación de producción esa dependencia no existe, así que **si el Build Command del alojamiento ejecutara `npm test`, el despliegue habría fallado**. Antes no pasaba, porque la suite anterior solo usaba dependencias de producción.
+
+- Se resolvió en el propio archivo de pruebas: el `require` va dentro de un `try`, y si falta la dependencia se registra una única prueba **saltada con su motivo escrito** y se abandona el módulo con un `return` de nivel superior, válido porque CommonJS envuelve cada módulo en una función.
+- No es un salto silencioso: el mensaje dice exactamente qué falta y qué hacer.
+- Comprobado en los dos sentidos ocultando el paquete de `node_modules`: **sin la dependencia la suite termina en 28 aprobadas, 0 fallidas, 1 saltada y código de salida 0**; con ella, 39 aprobadas.
+
+#### Simulación completa del despliegue
+
+No bastaba con razonarlo, así que se reprodujo lo que hace Render:
+
+- Se copiaron **solo los archivos versionados** (34, los que entrega `git ls-files`), sin `node_modules`, sin `.git`, sin `.env` y sin `data/private`.
+- `npm ci --omit=dev` dejó **16 paquetes**, ninguno de desarrollo.
+- `npm test` en esa copia terminó con **código 0** y la prueba saltada, es decir que un build que ejecute pruebas no se rompe.
+- Se arrancó el servidor **sin archivo `.env`**, con las variables entregadas por el entorno del proceso, que es como funciona Render.
+
+Resultado: **el despliegue simulado funciona por completo.**
+
+| Comprobación | Resultado |
+| --- | --- |
+| Rutas públicas, API y recursos estáticos | 200 |
+| `/adminmode.html` sin sesión | 302 a login |
+| Ruta inexistente | 404 |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
+| Cookie administrativa | `HttpOnly; SameSite=Strict; Path=/; Secure` |
+
+La cabecera HSTS y el atributo `Secure` confirman que la configuración de producción surte efecto.
+
+#### `.env.example`, que faltaba
+
+La bitácora lo listaba entre los archivos principales desde julio, pero **el archivo no existía en el repositorio**. Se creó, sin ningún secreto, documentando las seis variables que lee el código: `MONGODB_URI`, `MONGODB_DB`, `MONGODB_HOSTS`, `ADMIN_PASSWORD`, `NODE_ENV` y `PORT`, con cuáles son obligatorias, cuáles opcionales y qué depende de cada una. Se comprobó que `.gitignore` ignora `.env` pero **no** `.env.example`.
+
+#### Fragilidad detectada y corregida en las pruebas
+
+- Durante la verificación, una ejecución falló con *"Instance failed to start within 10000ms"*: el mongod en memoria no arrancó dentro del margen por omisión. Tres pasadas seguidas después salieron limpias, así que era puntual.
+- Aun así se subió `launchTimeout` de 10 a 60 segundos en la creación del conjunto de réplica. Un arranque en frío del binario, con el antivirus revisándolo la primera vez, puede pasarse de 10 segundos y tumbar la suite entera sin que nada esté mal.
+- Dos pasadas posteriores: 39 aprobadas, 0 fallidas.
+
+#### Qué debe estar puesto en el alojamiento
+
+- `MONGODB_URI` y `ADMIN_PASSWORD` son obligatorias; sin ellas el servidor se niega a arrancar con un mensaje explícito.
+- `NODE_ENV=production` es lo que enciende `Secure` y HSTS. Ya confirmado por el usuario.
+- `PORT` la asigna Render; no hace falta definirla.
+- `MONGODB_DB` y `MONGODB_HOSTS` son opcionales.
+- El Build Command puede quedarse en `npm install`; el Start Command es `npm start`. `engines` ya exige Node 18 o superior.
+
 ## Backlog al 22 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.

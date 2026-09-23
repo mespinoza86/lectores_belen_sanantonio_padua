@@ -12,9 +12,28 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const net = require('node:net');
 const crypto = require('node:crypto');
-const { MongoMemoryReplSet } = require('mongodb-memory-server');
 const { MongoClient } = require('mongodb');
 const bcrypt = require('bcrypt');
+
+// `mongodb-memory-server` es una dependencia de desarrollo, así que no existe en una
+// instalación de producción (`npm install` con NODE_ENV=production la omite). Si el
+// alojamiento ejecutase `npm test` durante el despliegue, un require directo lo
+// tumbaría. Aquí se avisa y se salta, en voz alta, en vez de romper la construcción.
+let MongoMemoryReplSet;
+try {
+  ({ MongoMemoryReplSet } = require('mongodb-memory-server'));
+} catch {
+  test(
+    'pruebas de integración de las reglas de asignación',
+    {
+      skip: 'falta mongodb-memory-server, dependencia de desarrollo: ejecuta npm install sin NODE_ENV=production',
+    },
+    () => {},
+  );
+  // En CommonJS el módulo está envuelto en una función, así que este return es válido
+  // y evita registrar el resto de las pruebas.
+  return;
+}
 
 const ADMIN = 'clave-administrativa-de-prueba';
 const CLAVE_LECTOR = 'clave-de-lector-de-prueba';
@@ -40,7 +59,10 @@ function puertoLibre() {
 }
 
 test.before(async () => {
-  replica = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+  // `launchTimeout` sube de los 10 s por omisión a 60 s. Un arranque en frío del
+  // binario de mongod, con el antivirus revisándolo la primera vez, puede pasarse de
+  // 10 s y hacer fallar la suite entera sin que nada esté mal.
+  replica = await MongoMemoryReplSet.create({ replSet: { count: 1, launchTimeout: 60_000 } });
   const uri = replica.getUri();
   const puerto = await puertoLibre();
 
