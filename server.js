@@ -1388,7 +1388,7 @@ function serve(req, res, url) {
   const file = path.resolve(root, `.${relative}`);
   const relativeToRoot = path.relative(path.resolve(root), file);
   if (relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404, securityHeaders()); return res.end('No encontrado'); }
-  const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+  const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json; charset=utf-8' };
   if (path.extname(file) === '.html') {
     const attributes = `data-mode="${adminPage ? 'admin' : 'user'}"${pageView ? ` data-page="${pageView}"` : ''}`;
     const html = fs.readFileSync(file, 'utf8').replace(/<body([^>]*)>/, `<body$1 ${attributes}>`);

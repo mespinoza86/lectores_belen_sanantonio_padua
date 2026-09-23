@@ -1879,6 +1879,72 @@ La bitácora lo listaba entre los archivos principales desde julio, pero **el ar
 - `MONGODB_DB` y `MONGODB_HOSTS` son opcionales.
 - El Build Command puede quedarse en `npm install`; el Start Command es `npm start`. `engines` ya exige Node 18 o superior.
 
+### La aplicación pasa a ser instalable desde Chrome, con el escudo de la Diaconía
+
+El usuario aportó `lectoresbelen.png`, el escudo **Ministros de la Palabra · San Antonio**, y pidió que apareciera como icono al instalar la aplicación desde Chrome. Eso exige convertirla en aplicación web instalable: manifiesto, iconos en los tamaños que Chrome requiere y un trabajador de servicio.
+
+#### La imagen de origen
+
+- PNG de 1254 × 1254, color RGB sin canal alfa, 2 MB. Cuadrada, que es lo que hacía falta.
+- Es un escudo de esquinas redondeadas sobre fondo blanco, con el texto **MINISTROS DE LA PALABRA** arriba y **SAN ANTONIO** abajo, ambos muy cerca del borde.
+- Ese detalle decide el diseño de los iconos: Android recorta los iconos *maskable* en círculo, y con la imagen a tamaño completo ambos textos se habrían perdido.
+
+#### Los iconos generados
+
+Se redimensionaron con `System.Drawing` desde PowerShell, con remuestreo bicúbico de alta calidad, sin agregar ninguna dependencia al proyecto. Quedan en `public/icons/`:
+
+| Archivo | Tamaño | Uso |
+| --- | --- | --- |
+| `icon-192.png` | 192 × 192 | Icono normal del manifiesto |
+| `icon-512.png` | 512 × 512 | Icono normal del manifiesto |
+| `icon-maskable-192.png` | 192 × 192 | Recorte adaptable de Android |
+| `icon-maskable-512.png` | 512 × 512 | Recorte adaptable de Android |
+| `apple-touch-icon.png` | 180 × 180 | Pantalla de inicio de iOS |
+| `favicon-32.png` | 32 × 32 | Pestaña del navegador |
+
+- Los dos *maskable* llevan el escudo **al 78 %** centrado sobre fondo blanco, de modo que el recorte circular no se come el texto. El fondo blanco encaja sin costura porque la propia imagen ya tiene las esquinas blancas.
+- Se comprobaron visualmente el normal y el adaptable, y se verificaron las dimensiones reales leyendo la cabecera de cada PNG: coinciden exactamente con lo que declara el manifiesto, que es requisito de Chrome.
+- **Pesan 1,3 MB en conjunto**, de los cuales 621 KB son el `icon-512.png`. Es bastante, pero el navegador los descarga una sola vez al instalar. Bajarlo más exigiría un codificador PNG mejor que el de `System.Drawing`, es decir una dependencia nueva para generar un recurso que no volverá a cambiar.
+
+#### Manifiesto
+
+`public/manifest.webmanifest`, con nombre **Ministros de la Palabra · San Antonio de Belén**, nombre corto **Lectores**, `start_url` y `scope` en la raíz, `display: standalone`, el verde `#315f50` de la aplicación como color de tema y el crema `#f7f3e8` como fondo. Incluye además dos accesos directos, a **Reporte** y a **Noticias**, que Chrome ofrece al mantener pulsado el icono instalado.
+
+#### Trabajador de servicio, deliberadamente vacío
+
+`public/sw.js` existe porque el criterio de instalación de Chrome pide un trabajador de servicio con manejador de `fetch`. **No guarda nada en caché, a propósito.** La aplicación es de datos vivos: planificación, confirmaciones y noticias cambian a diario, y una caché mal afinada serviría páginas viejas sin que nadie se diera cuenta. El manejador de `fetch` está vacío y no llama a `respondWith`, así que cada petición sigue su camino normal por la red.
+
+- Chrome lo detecta y avisa en consola: *"Fetch event handler is recognized as no-op"*. Es informativo y está asumido: el propio navegador optimiza ese caso saltándose el trabajador en la navegación, así que no hay sobrecarga real.
+- Se conserva de todas formas porque las versiones de Chrome que todavía exigen trabajador de servicio para instalar no podrían hacerlo sin él.
+- Si algún día se quiere funcionamiento sin conexión, la caché hay que diseñarla aparte, con versionado y una estrategia explícita por tipo de recurso.
+- El registro vive en `private/js/pwa.js`, en archivo externo porque la CSP es `script-src 'self'` y no admite scripts en línea.
+
+#### Cambios en el servidor y en las páginas
+
+- `server.js` aprende tres tipos MIME nuevos: `.png`, `.ico` y `.webmanifest`. Sin eso el manifiesto se habría servido como `application/octet-stream` y Chrome lo habría ignorado. Es el único cambio en el servidor.
+- Las cuatro páginas (`app.html`, `estadisticas.html`, `login.html`, `noticias.html`) enlazan el manifiesto, los iconos, el icono de iOS y el registro del trabajador.
+- No hizo falta tocar la CSP: el manifiesto y el trabajador caen bajo `default-src 'self'`, y los iconos bajo `img-src 'self'`.
+
+#### Verificación en Chrome real, con la CSP puesta
+
+Siguiendo la lección del 1 de septiembre, todo se comprobó contra el servidor real y no sobre `file://`:
+
+- **Cero violaciones de CSP** y **cero errores de red** en `/`, `/login.html`, `/noticias.html` y `/reporte.html`.
+- Chrome **descargó y procesó el manifiesto**, visible en su registro interno.
+- El trabajador de servicio **se registró y activó**: el propio Chrome reconoce su manejador de `fetch`.
+- Los nueve recursos nuevos se sirven con el tipo correcto: `application/manifest+json` el manifiesto, `text/javascript` el trabajador e `image/png` los seis iconos.
+- Las rutas de siempre siguen igual: 200 las públicas, 302 `/adminmode.html` sin sesión y 404 una ruta inexistente.
+- Un aviso de obsolescencia de Chrome hizo agregar `<meta name="mobile-web-app-capable">` junto a la variante de Apple. Tras el cambio, ese aviso desapareció.
+- `npm test`: 39 aprobadas, 0 fallidas. `npm run format:check` limpio y `node --check` correcto en todo, incluido `public/sw.js`.
+
+#### Lo que no se puede comprobar desde aquí
+
+El botón **Instalar** solo aparece de verdad sobre HTTPS y en el navegador del usuario. Lo verificado aquí es que se cumplen todos los requisitos documentados: origen seguro (`localhost` cuenta), manifiesto válido con nombre y nombre corto, `start_url`, `display: standalone`, iconos de 192 y 512 en PNG con las dimensiones declaradas, y trabajador de servicio con manejador de `fetch`. La confirmación final es instalarla desde Render.
+
+#### Detalle menor observado de paso
+
+Chrome avisa que los formularios de contraseña deberían llevar un campo de usuario, aunque esté oculto, por accesibilidad. Es anterior a este cambio y afecta a los diálogos de contraseña de los lectores. Queda anotado en el backlog.
+
 ## Backlog al 22 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
@@ -1906,6 +1972,7 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 - **Retirar el CSS muerto del formato tradicional.** `traditional-mass`, `traditional-column` y `traditional-reserves` quedaron sin uso al pasar la vista previa a SVG. Cuidado: el bloque que los contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí hace falta. La hoja está minificada y merece una revisión visual aparte.
 - **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado.
 - **Decidir si Inicio debe montar la sección `assign` oculta.** Tras unificar la plantilla, `renderAssignments()` se ejecuta también en Inicio; no es visible, pero es trabajo de render innecesario.
+- **Los formularios de contraseña no tienen campo de usuario.** Chrome lo avisa por accesibilidad: conviene agregar un campo de usuario oculto en los diálogos de contraseña de los lectores. Detectado el 22 de septiembre, es anterior a los cambios de ese día.
 - **`Evelia Ramirez` sin tilde.** Ni el formulario ni la base la traían. Si el apellido correcto es `Ramírez`, hay que corregirlo a mano.
 
 ### Decisión abierta
