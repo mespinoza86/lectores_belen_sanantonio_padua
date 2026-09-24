@@ -16,7 +16,7 @@ document.addEventListener('click', async e => {
       : '¿Está seguro de que no podrá asistir?';
     $('#confirmationActionCopy').textContent = isConfirm
       ? 'Se registrará su asistencia a esta misa.'
-      : 'Se retirará su asignación y se intentará llamar al siguiente suplente.';
+      : 'Se retirará su asignación y se intentará llamar a la siguiente persona de apoyo.';
     $('#confirmationActionDialog').showModal();
     return;
   }
@@ -90,7 +90,7 @@ document.addEventListener('click', async e => {
   if (e.target.closest('#randomAssign')) {
     if (
       !confirm(
-        `¿Reemplazar las asignaciones de ${monthLabel(state.month)} y generar titulares y suplentes según disponibilidad?`,
+        `¿Reemplazar las asignaciones de ${monthLabel(state.month)} y generar titulares y Equipo de apoyo según disponibilidad?`,
       )
     )
       return;
@@ -103,7 +103,7 @@ document.addEventListener('click', async e => {
         method: 'POST',
         body: JSON.stringify({ month: state.month }),
       });
-      toast('Titulares y suplentes generados');
+      toast('Titulares y Equipo de apoyo generados');
       await load();
     } catch (x) {
       toast(x.message, true);
@@ -342,7 +342,7 @@ $('#confirmationPasswordForm').addEventListener('submit', async e => {
     f.closest('dialog').close();
     f.reset();
     pendingConfirmation = null;
-    toast(action === 'confirm' ? 'Asistencia confirmada' : 'Se asignó el siguiente suplente');
+    toast(action === 'confirm' ? 'Asistencia confirmada' : 'Se llamó a la siguiente persona de apoyo');
     await load();
   } catch (error) {
     showFormError(f, error.message);
@@ -525,7 +525,7 @@ $('#assignmentBoard')?.addEventListener('change', async e => {
       method: 'POST',
       body: JSON.stringify({ massId: group.dataset.mass, date: group.dataset.date, substituteIds }),
     });
-    toast('Lista de suplentes actualizada');
+    toast('Equipo de apoyo actualizado');
     await load();
   } catch (x) {
     toast(x.message, true);

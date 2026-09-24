@@ -171,7 +171,7 @@ function traditionalSectionSvg(item, top) {
     reservesH = layout.reserveLabelH + traditionalReserveRows(item) * layout.reserveRowH + layout.reservePad;
   parts.push(
     `<rect x="${left}" y="${reservesTop}" width="${inner}" height="${reservesH}" fill="#eef2f8" stroke="#1d2733"/>`,
-    traditionalTextSvg('Suplentes', left + 14, reservesTop + layout.reserveLabelH / 2, {
+    traditionalTextSvg('Equipo de apoyo', left + 14, reservesTop + layout.reserveLabelH / 2, {
       size: 19,
       weight: 700,
       anchor: 'start',
@@ -196,7 +196,7 @@ function traditionalSectionSvg(item, top) {
   else
     parts.push(
       traditionalTextSvg(
-        'Sin suplentes asignados',
+        'Sin Equipo de apoyo asignado',
         left + inner / 2,
         reservesTop + layout.reserveLabelH + layout.reserveRowH / 2,
         { size: 18, fill: '#5c6670' },
@@ -391,7 +391,7 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
   parts.push(
     text(TRADITIONAL_TITLE, width / 2, 42, inner, 38, '#24405f', 700, 'middle'),
     text(monthLabel(state.month), width / 2, 82, inner, 28, '#3f66a3', 700, 'middle'),
-    text('Suplentes y lectores sin asignación', width / 2, 113, inner, 23, '#24405f', 700, 'middle'),
+    text('Equipo de apoyo y lectores sin asignación', width / 2, 113, inner, 23, '#24405f', 700, 'middle'),
   );
   const heading = label => {
     parts.push(
@@ -425,8 +425,9 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
     });
     top += height;
   };
-  heading('SUPLENTES ASIGNADOS POR MISA');
-  if (!data.substituteGroups.length) row(['Sin suplentes asignados durante este mes.'], [inner], '#eef2f8');
+  heading('EQUIPO DE APOYO ASIGNADO POR MISA');
+  if (!data.substituteGroups.length)
+    row(['Sin Equipo de apoyo asignado durante este mes.'], [inner], '#eef2f8');
   data.substituteGroups.forEach(group => {
     row([`${group.mass.name} · ${massSchedule(group.mass)}`], [inner], '#5d9bd3', true);
     group.readers.forEach((reader, index) =>
@@ -443,7 +444,7 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
     row(
       [
         item.reader.name,
-        item.reader.substituteOnly ? 'Solo suplente' : 'Lector normal',
+        item.reader.substituteOnly ? 'Solo apoyo' : 'Lector normal',
         item.preferred.join(' · ') || 'Ninguna misa',
       ],
       columns,
@@ -506,7 +507,7 @@ function downloadAvailabilityImage() {
       const link = document.createElement('a'),
         objectUrl = URL.createObjectURL(blob);
       link.href = objectUrl;
-      link.download = `suplentes-y-disponibles-${state.month}.png`;
+      link.download = `equipo-de-apoyo-y-disponibles-${state.month}.png`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     }, 'image/png');

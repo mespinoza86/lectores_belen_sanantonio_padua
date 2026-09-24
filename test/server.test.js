@@ -394,7 +394,7 @@ test('la validacion rechaza a un suplente repartido entre dos misas', () => {
         celebracion('A', '2026-09-05', 'Primera', 'p', ['x']),
         celebracion('B', '2026-09-06', 'Primera', 'q', ['x']),
       ]),
-    /suplente en mas de una misa|suplente en más de una misa/,
+    /persona de apoyo en mas de una misa|persona de apoyo en más de una misa/,
   );
 });
 
@@ -405,7 +405,7 @@ test('la validacion rechaza ser titular de una misa y suplente de otra', () => {
         celebracion('A', '2026-09-05', 'Primera', 'x'),
         celebracion('B', '2026-09-06', 'Primera', 'q', ['x']),
       ]),
-    /titular como suplente/,
+    /titular como persona de apoyo/,
   );
 });
 
@@ -413,7 +413,7 @@ test('la validacion rechaza ser titular y suplente de la MISMA misa', () => {
   // Antes pasaba desapercibido: quien ya sirve no debe ocupar ademas la banca.
   assert.throws(
     () => assertReadersBelongToSingleMass([celebracion('A', '2026-09-05', 'Primera', 'x', ['x'])]),
-    /titular como suplente/,
+    /titular como persona de apoyo/,
   );
   // Y tambien al reves, cuando la banca aparece antes en el recorrido.
   assert.throws(
@@ -422,7 +422,7 @@ test('la validacion rechaza ser titular y suplente de la MISMA misa', () => {
         celebracion('A', '2026-09-05', 'Primera', 'q', ['x']),
         celebracion('A', '2026-09-12', 'Salmo', 'x'),
       ]),
-    /ya es suplente/,
+    /ya es persona de apoyo/,
   );
 });
 

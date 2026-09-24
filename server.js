@@ -340,7 +340,7 @@ async function validateAssignment(input) {
     database.collection('readers').findOne({ id: readerId })
   ]);
   if (!mass || !reader?.active || reader.substituteOnly || !readerCanServeMass(reader, massId) || !month || !mass.roles.includes(role)) {
-    throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : !readerCanServeMass(reader || {}, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Asignación inválida');
+    throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como persona de apoyo' : !readerCanServeMass(reader || {}, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Asignación inválida');
   }
   return { massId, readerId, role, month, date, substituteIds };
 }
@@ -365,7 +365,7 @@ async function changeManualAssignment(input) {
   if (readerId) {
     reader = await database.collection('readers').findOne({ id: readerId, active: true });
     if (!reader || reader.substituteOnly || !readerCanServeMass(reader, massId)) {
-      throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : reader && !readerCanServeMass(reader, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Lector inválido');
+      throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como persona de apoyo' : reader && !readerCanServeMass(reader, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Lector inválido');
     }
   }
 
@@ -578,17 +578,17 @@ function assertReadersBelongToSingleMass(assignments) {
       }
       // Quien es titular no puede estar en la banca, ni siquiera de su propia misa.
       if (substituteMassByReader.has(assignment.readerId)) {
-        throw new Error('La planificación intentó usar como titular a alguien que ya es suplente');
+        throw new Error('La planificación intentó usar como titular a alguien que ya es persona de apoyo');
       }
       titularMassByReader.set(assignment.readerId, assignment.massId);
     }
     for (const readerId of assignment.substituteIds || []) {
       if (titularMassByReader.has(readerId)) {
-        throw new Error('La planificación intentó usar a un titular como suplente');
+        throw new Error('La planificación intentó usar a un titular como persona de apoyo');
       }
       const assignedMass = substituteMassByReader.get(readerId);
       if (assignedMass && assignedMass !== assignment.massId) {
-        throw new Error('La planificación intentó colocar a un suplente en más de una misa');
+        throw new Error('La planificación intentó colocar a una persona de apoyo en más de una misa');
       }
       substituteMassByReader.set(readerId, assignment.massId);
     }
@@ -688,7 +688,7 @@ async function randomAssignments(month) {
 
   const missingRoles = slots.filter(slot => !slotReader.get(slot.id));
   if (missingRoles.length) {
-    throw new Error('No hay suficientes lectores disponibles para llenar todas las funciones y un suplente por misa');
+    throw new Error('No hay suficientes lectores disponibles para llenar todas las funciones y una persona de apoyo por misa');
   }
 
   const usedReaders = new Set(slotReader.values());
@@ -1189,7 +1189,7 @@ async function api(req, res, url) {
         database.collection('readers').findOne({ id: cleanText(input.readerId, 80), active: true }),
         database.collection('masses').findOne({ id: cleanText(input.massId, 80), active: true })
       ]);
-      if (!reader || reader.substituteOnly) throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como suplente' : 'Lector inválido');
+      if (!reader || reader.substituteOnly) throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como persona de apoyo' : 'Lector inválido');
       if (!mass || !readerCanServeMass(reader, mass.id)) throw new Error('Este lector indicó que no puede asistir a esta misa');
       const replacementMonth = cleanText(input.month, 7) || cleanText(input.date, 10).slice(0, 7);
       const otherUse = await database.collection('assignments').findOne({
@@ -1200,7 +1200,7 @@ async function api(req, res, url) {
         // bloquear pertenecer a OTRA misa del mes, como titular o como suplente.
         $or: [{ readerId: reader.id }, { substituteIds: reader.id, massId: { $ne: mass.id } }]
       });
-      if (otherUse) throw new Error('Cada persona solo puede pertenecer a una misa durante el mes, como titular o suplente');
+      if (otherUse) throw new Error('Cada persona solo puede pertenecer a una misa durante el mes, como titular o como persona de apoyo');
       const duplicate = await database.collection('assignments').findOne({
         massId: cleanText(input.massId, 80), date: cleanText(input.date, 10), readerId: reader.id,
         ...(id === 'new' ? {} : { id: { $ne: id } })
@@ -1254,7 +1254,7 @@ async function api(req, res, url) {
         .filter(reader => readerCanServeMass(reader, massId))
         .map(reader => reader.id));
       const substituteIds = requestedIds.filter(readerId => validIds.has(readerId) && !titularIds.has(readerId));
-      if (!substituteIds.length) throw new Error('Cada misa debe conservar al menos un suplente');
+      if (!substituteIds.length) throw new Error('Cada misa debe conservar al menos una persona de apoyo');
       const mongoSession = client.startSession();
       try {
         await mongoSession.withTransaction(async () => {

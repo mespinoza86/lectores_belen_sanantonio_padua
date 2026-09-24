@@ -100,7 +100,7 @@ function renderReaderConfirmations(readers, assignments, month) {
         .map(({ reader, confirmed, declined, pending }) => {
           const decisions = confirmed + declined;
           const confirmationRate = decisions ? Math.round((confirmed / decisions) * 100) : 0;
-          return `<tr class="${declined ? 'has-declines' : ''}"><td><b>${esc(reader.name)}</b><small>${reader.active ? 'Activo' : 'Inactivo'}${reader.substituteOnly ? ' · Solo suplente' : ''}</small></td><td><span class="metric confirmed">${confirmed}</span></td><td><span class="metric declined">${declined}</span></td><td><span class="metric pending">${pending}</span></td><td><b>${decisions ? `${confirmationRate}% confirmó` : 'Sin respuesta'}</b><small>${decisions} decisión${decisions === 1 ? '' : 'es'} registrada${decisions === 1 ? '' : 's'}</small></td></tr>`;
+          return `<tr class="${declined ? 'has-declines' : ''}"><td><b>${esc(reader.name)}</b><small>${reader.active ? 'Activo' : 'Inactivo'}${reader.substituteOnly ? ' · Solo apoyo' : ''}</small></td><td><span class="metric confirmed">${confirmed}</span></td><td><span class="metric declined">${declined}</span></td><td><span class="metric pending">${pending}</span></td><td><b>${decisions ? `${confirmationRate}% confirmó` : 'Sin respuesta'}</b><small>${decisions} decisión${decisions === 1 ? '' : 'es'} registrada${decisions === 1 ? '' : 's'}</small></td></tr>`;
         })
         .join('')}</tbody></table>`
     : `<article class="card"><h3>Sin respuestas en ${esc(monthName(month))}</h3><p>No hay confirmaciones, rechazos ni asignaciones pendientes registradas para este mes.</p></article>`;
@@ -113,7 +113,7 @@ function monthPlacements(assignments, masses, month) {
   const placements = new Map();
   const add = (readerId, kind, massId) => {
     if (!readerId) return;
-    const label = `${kind === 'titular' ? 'Titular' : 'Suplente'} · ${massName(massId)}`;
+    const label = `${kind === 'titular' ? 'Titular' : 'Apoyo'} · ${massName(massId)}`;
     const current = placements.get(readerId) || [];
     if (!current.some(entry => entry.label === label)) current.push({ kind, label });
     placements.set(readerId, current);
@@ -138,17 +138,17 @@ function renderReaderDirectory(readers, masses, assignments, month) {
   const idleSubstitutes = substitutes.filter(reader => !placements.has(reader.id));
   const idle = [...idleNormal, ...idleSubstitutes];
   $('#readerDirectorySummary').innerHTML =
-    `<article><span class="stat-icon green">✓</span><div><strong>${normal.length}</strong><small>Activos normales</small></div></article><article><span class="stat-icon gold">↻</span><div><strong>${substitutes.length}</strong><small>Solo suplentes</small></div></article><article><span class="stat-icon rose">—</span><div><strong>${inactive.length}</strong><small>Inactivos</small></div></article><article><span class="stat-icon gold">…</span><div><strong>${idle.length}</strong><small>Activos sin asignación en ${esc(monthName(month))}</small></div></article>`;
+    `<article><span class="stat-icon green">✓</span><div><strong>${normal.length}</strong><small>Activos normales</small></div></article><article><span class="stat-icon gold">↻</span><div><strong>${substitutes.length}</strong><small>Solo apoyo</small></div></article><article><span class="stat-icon rose">—</span><div><strong>${inactive.length}</strong><small>Inactivos</small></div></article><article><span class="stat-icon gold">…</span><div><strong>${idle.length}</strong><small>Activos sin asignación en ${esc(monthName(month))}</small></div></article>`;
   const unassignedPerson = reader => {
     const preferred = activeMasses.filter(mass => readerPrefersMass(reader, mass.id));
-    return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b><span class="coverage-badge ${reader.substituteOnly ? 'substitute-only' : 'normal'}">${reader.substituteOnly ? 'Solo suplente' : 'Lector normal'}</span></div><small><b>Prefiere:</b> ${preferred.length ? preferred.map(mass => esc(mass.name)).join(' · ') : 'Ninguna misa'}</small></article>`;
+    return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b><span class="coverage-badge ${reader.substituteOnly ? 'substitute-only' : 'normal'}">${reader.substituteOnly ? 'Solo apoyo' : 'Lector normal'}</span></div><small><b>Prefiere:</b> ${preferred.length ? preferred.map(mass => esc(mass.name)).join(' · ') : 'Ninguna misa'}</small></article>`;
   };
   const unassignedSection = (title, list) =>
     list.length
       ? `<section class="unassigned-reader-section"><h4>${esc(title)} <span>${list.length}</span></h4><div class="coverage-reader-list">${list.map(unassignedPerson).join('')}</div></section>`
       : '';
   $('#readerUnassignedDirectory').innerHTML =
-    `<details class="coverage-group idle unassigned-readers" open><summary class="coverage-group-head"><h3>Lectores sin asignación</h3><div class="coverage-group-meta"><span>${idle.length}</span><span class="coverage-group-arrow" aria-hidden="true">⌄</span></div></summary>${idle.length ? `<div class="unassigned-reader-sections">${unassignedSection('Pueden ser titulares o suplentes', idleNormal)}${unassignedSection('Disponibles únicamente como suplentes', idleSubstitutes)}</div>` : '<div class="coverage-reader-list"><article class="coverage-reader unassigned-empty"><small>Todos los lectores activos tienen asignación este mes.</small></article></div>'}</details>`;
+    `<details class="coverage-group idle unassigned-readers" open><summary class="coverage-group-head"><h3>Lectores sin asignación</h3><div class="coverage-group-meta"><span>${idle.length}</span><span class="coverage-group-arrow" aria-hidden="true">⌄</span></div></summary>${idle.length ? `<div class="unassigned-reader-sections">${unassignedSection('Pueden ser titulares o personas de apoyo', idleNormal)}${unassignedSection('Disponibles únicamente como personas de apoyo', idleSubstitutes)}</div>` : '<div class="coverage-reader-list"><article class="coverage-reader unassigned-empty"><small>Todos los lectores activos tienen asignación este mes.</small></article></div>'}</details>`;
   const person = reader => {
     const marks = (placements.get(reader.id) || []).map(
       entry => `<span class="coverage-badge ${entry.kind}">${esc(entry.label)}</span>`,
@@ -176,7 +176,12 @@ function renderReaderDirectory(readers, masses, assignments, month) {
     `<details class="coverage-group ${kind}"><summary class="coverage-group-head"><h3>${esc(title)}</h3><div class="coverage-group-meta"><span>${list.length}</span><span class="coverage-group-arrow" aria-hidden="true">⌄</span></div></summary><div class="coverage-reader-list">${list.length ? list.map(person).join('') : `<article class="coverage-reader"><small>${empty}</small></article>`}</div></details>`;
   $('#readerDirectory').innerHTML =
     group('Activos normales', 'preferred', normal, 'No hay lectores activos.') +
-    group('Solo suplentes', 'flexible', substitutes, 'Ningún lector está configurado como solo suplente.') +
+    group(
+      'Solo personas de apoyo',
+      'flexible',
+      substitutes,
+      'Ningún lector está configurado únicamente como persona de apoyo.',
+    ) +
     group('Inactivos', 'unavailable', inactive, 'No hay lectores inactivos.');
 }
 
@@ -217,7 +222,7 @@ function render(readers, masses) {
     ? rows
         .map(({ mass, preferred, flexible, unavailable, possibleTotal, status }) => {
           const minimum = mass.roles.length + 1;
-          return `<article class="availability-card ${status.key}"><div class="availability-card-head"><div><h3>${esc(mass.name)}</h3><span class="schedule">${esc(schedule(mass))}</span></div><span class="badge coverage-badge ${status.key}">${status.label}</span></div><div class="availability-total"><strong>${preferred}</strong><span>la prefieren · ${possibleTotal} pueden servir</span></div><div class="availability-bar" title="${possibleTotal} pueden servir"><span style="width:${Math.max(possibleTotal ? 7 : 0, Math.round((possibleTotal / maxAvailable) * 100))}%"></span></div><div class="availability-breakdown preference-breakdown"><div><b>${preferred}</b><small>Preferida</small></div><div><b>${flexible}</b><small>Alternativa</small></div><div><b>${unavailable}</b><small>No pueden asistir</small></div></div><p class="coverage-note">Necesita al menos ${mass.roles.length} lector${mass.roles.length === 1 ? '' : 'es'} apto${mass.roles.length === 1 ? '' : 's'} para titular y 1 suplente (${minimum} personas en total). Las alternativas solo se usan si las preferencias no alcanzan.</p></article>`;
+          return `<article class="availability-card ${status.key}"><div class="availability-card-head"><div><h3>${esc(mass.name)}</h3><span class="schedule">${esc(schedule(mass))}</span></div><span class="badge coverage-badge ${status.key}">${status.label}</span></div><div class="availability-total"><strong>${preferred}</strong><span>la prefieren · ${possibleTotal} pueden servir</span></div><div class="availability-bar" title="${possibleTotal} pueden servir"><span style="width:${Math.max(possibleTotal ? 7 : 0, Math.round((possibleTotal / maxAvailable) * 100))}%"></span></div><div class="availability-breakdown preference-breakdown"><div><b>${preferred}</b><small>Preferida</small></div><div><b>${flexible}</b><small>Alternativa</small></div><div><b>${unavailable}</b><small>No pueden asistir</small></div></div><p class="coverage-note">Necesita al menos ${mass.roles.length} lector${mass.roles.length === 1 ? '' : 'es'} apto${mass.roles.length === 1 ? '' : 's'} para titular y 1 persona de apoyo (${minimum} personas en total). Las alternativas solo se usan si las preferencias no alcanzan.</p></article>`;
         })
         .join('')
     : '<article class="card"><h3>No hay misas activas</h3><p>Configura una misa para calcular su disponibilidad.</p></article>';

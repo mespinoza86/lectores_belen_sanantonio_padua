@@ -33,13 +33,13 @@ function renderDashboard() {
                 item => item.massId === mass.id && item.role === role && item.date === date,
               );
               if (!a)
-                return `<div class="confirmation-row needs"><div><b>${esc(role)}</b><small>Suplente por definir</small></div>${isAdmin ? adminReplacementSelect('', mass.id, role, date) : ''}</div>`;
+                return `<div class="confirmation-row needs"><div><b>${esc(role)}</b><small>Apoyo por definir</small></div>${isAdmin ? adminReplacementSelect('', mass.id, role, date) : ''}</div>`;
               const status = a.confirmationStatus || 'pending';
               const label =
                 status === 'confirmed'
                   ? 'Confirmado'
                   : status === 'needs_replacement'
-                    ? 'Suplente por definir'
+                    ? 'Apoyo por definir'
                     : 'Sin confirmar';
               const hasStarted = `${date}T${mass.time}` <= costaRicaDateTime();
               const controls = hasStarted
@@ -56,7 +56,7 @@ function renderDashboard() {
           const reportAction = hasEnded
             ? `<div class="eucharist-report-action"><button class="primary open-eucharist-report" data-mass="${mass.id}" data-date="${date}">Crear reporte de Eucaristía</button></div>`
             : '';
-          return `<details class="weekly-mass"><summary class="weekly-mass-head"><div><b>${esc(mass.name)}</b><small>${esc(formatDate(date))} · ${mass.time}</small></div><span class="weekly-mass-arrow" aria-hidden="true">⌄</span></summary><div class="weekly-mass-content">${roles}<div class="weekly-reserves"><b>Suplentes:</b> ${reserves.length ? reserves.map((id, index) => `${index + 1}. ${esc(readerName(id))}`).join(' · ') : 'Sin suplentes disponibles'}</div>${reportAction}</div></details>`;
+          return `<details class="weekly-mass"><summary class="weekly-mass-head"><div><b>${esc(mass.name)}</b><small>${esc(formatDate(date))} · ${mass.time}</small></div><span class="weekly-mass-arrow" aria-hidden="true">⌄</span></summary><div class="weekly-mass-content">${roles}<div class="weekly-reserves"><b>Equipo de apoyo:</b> ${reserves.length ? reserves.map((id, index) => `${index + 1}. ${esc(readerName(id))}`).join(' · ') : 'Sin Equipo de apoyo disponible'}</div>${reportAction}</div></details>`;
         })
         .join('')
     : '<div class="empty">No hay celebraciones programadas para esta semana.</div>';
@@ -226,7 +226,7 @@ function renderReaders() {
     const normal = state.readers.filter(r => r.active && !r.substituteOnly).length,
       substitutes = state.readers.filter(r => r.active && r.substituteOnly).length,
       inactive = state.readers.filter(r => !r.active).length;
-    summary.innerHTML = `<article><span class="stat-icon green">✓</span><div><strong>${normal}</strong><small>Activos normales</small></div></article><article><span class="stat-icon gold">↻</span><div><strong>${substitutes}</strong><small>Solo suplentes</small></div></article><article><span class="stat-icon rose">—</span><div><strong>${inactive}</strong><small>Inactivos</small></div></article>`;
+    summary.innerHTML = `<article><span class="stat-icon green">✓</span><div><strong>${normal}</strong><small>Activos normales</small></div></article><article><span class="stat-icon gold">↻</span><div><strong>${substitutes}</strong><small>Solo apoyo</small></div></article><article><span class="stat-icon rose">—</span><div><strong>${inactive}</strong><small>Inactivos</small></div></article>`;
   }
   const visibleReaders = readerListFilter
     ? sortedReaders.filter(reader => reader.id === readerListFilter)
@@ -242,7 +242,7 @@ function renderReaders() {
               .slice(0, 2)
               .join('')
               .toUpperCase(),
-          )}</span><div><h3>${esc(r.name)}</h3><span class="badge ${r.active ? '' : 'off'}">${r.active ? 'Activo' : 'Inactivo'}</span>${r.active && r.substituteOnly ? '<span class="badge">Solo suplente</span>' : ''}${isAdmin && r.mustChangePassword ? '<span class="badge off">Cambio de contraseña pendiente</span>' : ''}</div></div>${isAdmin ? `<p>${esc(r.phone || 'Sin teléfono')}</p>` : ''}<p class="availability-copy"><b>Preferidas:</b> ${preferences.preferred.length ? preferences.preferred.map(esc).join(' · ') : 'Ninguna'}</p><p class="availability-copy"><b>También puede servir:</b> ${preferences.flexible.length ? preferences.flexible.map(esc).join(' · ') : 'Ninguna'}</p><p class="availability-copy"><b>No puede asistir:</b> ${preferences.unavailable.length ? preferences.unavailable.map(esc).join(' · ') : 'Ninguna'}</p>${r.notes ? `<p>${esc(r.notes)}</p>` : ''}<div class="reader-password-action">${r.active ? `<button class="small-btn self-edit-reader user-only" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Editar mis datos</button>` : ''}<button class="small-btn change-reader-password" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Cambiar contraseña</button>${isAdmin ? `<button class="small-btn reset-reader-password" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Generar contraseña temporal</button>` : ''}</div><div class="card-actions"><button class="small-btn edit-reader" data-id="${esc(r.id)}">Editar</button><button class="small-btn danger delete-reader" data-id="${esc(r.id)}">Eliminar</button></div></article>`;
+          )}</span><div><h3>${esc(r.name)}</h3><span class="badge ${r.active ? '' : 'off'}">${r.active ? 'Activo' : 'Inactivo'}</span>${r.active && r.substituteOnly ? '<span class="badge">Solo apoyo</span>' : ''}${isAdmin && r.mustChangePassword ? '<span class="badge off">Cambio de contraseña pendiente</span>' : ''}</div></div>${isAdmin ? `<p>${esc(r.phone || 'Sin teléfono')}</p>` : ''}<p class="availability-copy"><b>Preferidas:</b> ${preferences.preferred.length ? preferences.preferred.map(esc).join(' · ') : 'Ninguna'}</p><p class="availability-copy"><b>También puede servir:</b> ${preferences.flexible.length ? preferences.flexible.map(esc).join(' · ') : 'Ninguna'}</p><p class="availability-copy"><b>No puede asistir:</b> ${preferences.unavailable.length ? preferences.unavailable.map(esc).join(' · ') : 'Ninguna'}</p>${r.notes ? `<p>${esc(r.notes)}</p>` : ''}<div class="reader-password-action">${r.active ? `<button class="small-btn self-edit-reader user-only" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Editar mis datos</button>` : ''}<button class="small-btn change-reader-password" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Cambiar contraseña</button>${isAdmin ? `<button class="small-btn reset-reader-password" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Generar contraseña temporal</button>` : ''}</div><div class="card-actions"><button class="small-btn edit-reader" data-id="${esc(r.id)}">Editar</button><button class="small-btn danger delete-reader" data-id="${esc(r.id)}">Eliminar</button></div></article>`;
         })
         .join('')
     : emptyCard('No hay lectores todavía', 'Agrega la primera persona del equipo.');
@@ -330,14 +330,14 @@ function renderAssignments() {
                   ).join('')
                 : reserves.length
                   ? `<ol>${reserves.map(id => `<li>${esc(readerName(id))}</li>`).join('')}</ol>`
-                  : '<span class="empty">Sin suplentes asignados.</span>';
+                  : '<span class="empty">Sin Equipo de apoyo asignado.</span>';
               const roles = m.roles
                 .map(role => {
                   const a = assignment(m.id, role, date);
                   return `<div class="role-row"><label>${esc(role)}</label><select class="assign-select" data-mass="${m.id}" data-role="${esc(role)}" data-date="${date}" data-reader="${a?.readerId || ''}"><option value="">— Sin asignar —</option>${assignmentReaderOptions(titularReaders, m.id, a?.readerId || '')}</select></div>`;
                 })
                 .join('');
-              return `<section class="assignment-date"><h4>${esc(formatDate(date))}</h4>${roles}<div class="date-reserves" data-mass="${m.id}" data-date="${date}"><div><b>Suplentes de esta misa</b><small>En orden de llamada</small></div><div class="substitute-controls">${reserveContent}</div></div></section>`;
+              return `<section class="assignment-date"><h4>${esc(formatDate(date))}</h4>${roles}<div class="date-reserves" data-mass="${m.id}" data-date="${date}"><div><b>Equipo de apoyo de esta misa</b><small>En orden de llamada</small></div><div class="substitute-controls">${reserveContent}</div></div></section>`;
             })
             .join('');
           return `<article class="mass-assign"><div class="mass-assign-head"><div><h3>${esc(m.name)}</h3><small>${esc(massSchedule(m))} · ${dates.length} fecha(s) en ${monthLabel(state.month)}</small></div><span class="badge">${m.roles.length} funciones por misa</span></div>${datePlans}</article>`;
@@ -347,8 +347,8 @@ function renderAssignments() {
       ? emptyCard(
           'Sin misas para este lector',
           assignmentMassFilter
-            ? `${readerName(assignmentReaderFilter)} no participa como titular ni suplente en ${availableMasses.find(mass => mass.id === assignmentMassFilter)?.name || 'la misa seleccionada'} durante ${monthLabel(state.month)}.`
-            : `${readerName(assignmentReaderFilter)} no participa como titular ni suplente en ${monthLabel(state.month)}.`,
+            ? `${readerName(assignmentReaderFilter)} no participa como titular ni como persona de apoyo en ${availableMasses.find(mass => mass.id === assignmentMassFilter)?.name || 'la misa seleccionada'} durante ${monthLabel(state.month)}.`
+            : `${readerName(assignmentReaderFilter)} no participa como titular ni como persona de apoyo en ${monthLabel(state.month)}.`,
         )
       : emptyCard('Nada que asignar', 'Agrega una misa que ocurra durante este mes.');
 }
@@ -372,7 +372,7 @@ function readerMonthPlacements(readerId) {
     labels.push(`Titular · ${state.masses.find(mass => mass.id === id)?.name || 'Misa'}`),
   );
   substituteMassIds.forEach(id =>
-    labels.push(`Suplente · ${state.masses.find(mass => mass.id === id)?.name || 'Misa'}`),
+    labels.push(`Apoyo · ${state.masses.find(mass => mass.id === id)?.name || 'Misa'}`),
   );
   return labels;
 }
@@ -395,7 +395,7 @@ function renderCoverageUnassigned(masses) {
   );
   const card = reader => {
     const preferred = masses.filter(mass => readerPrefersMass(reader, mass.id));
-    return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b><span class="coverage-badge ${reader.substituteOnly ? 'substitute-only' : 'normal'}">${reader.substituteOnly ? 'Solo suplente' : 'Lector normal'}</span></div><small><b>Prefiere:</b> ${preferred.length ? preferred.map(mass => esc(mass.name)).join(' · ') : 'Ninguna misa'}</small></article>`;
+    return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b><span class="coverage-badge ${reader.substituteOnly ? 'substitute-only' : 'normal'}">${reader.substituteOnly ? 'Solo apoyo' : 'Lector normal'}</span></div><small><b>Prefiere:</b> ${preferred.length ? preferred.map(mass => esc(mass.name)).join(' · ') : 'Ninguna misa'}</small></article>`;
   };
   const emptyMessage = query
     ? 'No hay lectores sin asignación que coincidan con la búsqueda.'
@@ -455,9 +455,7 @@ function renderCoverage() {
       },
     ];
   const official = reader =>
-    substituteIds.has(reader.id)
-      ? '<span class="coverage-badge substitute">Suplente de esta misa</span>'
-      : '';
+    substituteIds.has(reader.id) ? '<span class="coverage-badge substitute">Apoyo de esta misa</span>' : '';
   const card = reader => {
     const placements = readerMonthPlacements(reader.id);
     return `<article class="coverage-reader"><div><b>${esc(reader.name)}</b>${official(reader)}</div><small>${placements.length ? placements.map(esc).join(' · ') : 'Sin asignación en este mes'}</small></article>`;
@@ -475,7 +473,7 @@ function renderCoverage() {
                 )
                 .map(card)
                 .join('')
-            : '<p class="empty">No hay suplentes en esta categoría.</p>'
+            : '<p class="empty">No hay personas de apoyo en esta categoría.</p>'
         }</div></section>`,
     )
     .join('')}</div>`;
@@ -486,7 +484,7 @@ function renderReport() {
       ? Object.groupBy(events, x => x.date)
       : events.reduce((a, x) => ((a[x.date] ??= []).push(x), a), {});
   $('#reportContent').innerHTML =
-    `<div class="report-title"><p class="eyebrow">PARROQUIA · MINISTERIO DE LECTORES</p><h2>Programación de ${monthLabel(state.month)}</h2><p>Titulares y suplentes por celebración</p></div>${
+    `<div class="report-title"><p class="eyebrow">PARROQUIA · MINISTERIO DE LECTORES</p><h2>Programación de ${monthLabel(state.month)}</h2><p>Titulares y Equipo de apoyo por celebración</p></div>${
       events.length
         ? Object.entries(grouped)
             .map(
@@ -501,7 +499,7 @@ function renderReport() {
                           a.date === date &&
                           a.substituteIds?.length,
                       )?.substituteIds || [];
-                    return `<div class="report-mass"><h4>${esc(mass.name)} · ${mass.time}</h4><div class="report-roles">${mass.roles.map(role => `<div><span>${esc(role)}:</span> <b>${esc(readerName(assignment(mass.id, role, date)?.readerId))}</b></div>`).join('')}</div><div class="report-reserves"><span>Suplentes, en orden:</span> <b>${reserves.length ? reserves.map((id, index) => `${index + 1}. ${esc(readerName(id))}`).join(' · ') : 'Sin suplentes asignados'}</b></div></div>`;
+                    return `<div class="report-mass"><h4>${esc(mass.name)} · ${mass.time}</h4><div class="report-roles">${mass.roles.map(role => `<div><span>${esc(role)}:</span> <b>${esc(readerName(assignment(mass.id, role, date)?.readerId))}</b></div>`).join('')}</div><div class="report-reserves"><span>Equipo de apoyo, en orden:</span> <b>${reserves.length ? reserves.map((id, index) => `${index + 1}. ${esc(readerName(id))}`).join(' · ') : 'Sin Equipo de apoyo asignado'}</b></div></div>`;
                   })
                   .join('')}`,
             )

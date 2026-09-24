@@ -2041,6 +2041,121 @@ Las reservas, por orden de fricción para seguir trabajando:
 3. `common-eventos.js` tiene 581 líneas con un único escuchador delegado.
 4. Conviven dos estilos de nombres: largos y descriptivos en el servidor, abreviados (`f`, `x`, `r`, `e`) en el cliente.
 
+## Cambio de vocabulario del 23 de septiembre de 2026: de «suplente» a «Equipo de apoyo»
+
+El usuario pidió que la palabra **suplente** desapareciera de todo lo que se ve en pantalla. No es un buscar-y-reemplazar: «suplente» es una persona contable y «equipo de apoyo» es un colectivo, así que sustituir la palabra sola dejaba frases rotas («Sin equipo de apoyos disponibles», «al menos un equipo de apoyo»).
+
+### La regla de uso, decidida por el usuario
+
+| Cuándo | Término |
+| --- | --- |
+| El grupo (la banca de una misa) | **Equipo de apoyo** |
+| Una persona o un puesto, en frase completa | **persona de apoyo** |
+| Insignias, contadores y etiquetas cortas, donde el contexto ya se entiende | **Apoyo** |
+
+El usuario descartó expresamente escribir «Equipo de Apoyo» con las dos palabras en mayúscula, porque al ir acompañado de otras palabras en minúscula se veía raro. Queda **«Equipo de apoyo»**, con mayúscula solo en la primera.
+
+### Dónde se cambió: los 45 textos, uno por uno
+
+| Archivo | Antes | Ahora |
+| --- | --- | --- |
+| `public/app.html` | SUPLENTES Y DISPONIBLES | EQUIPO DE APOYO Y DISPONIBLES |
+| `public/app.html` | ⤓ PDF suplentes y disponibles | ⤓ PDF Equipo de apoyo y disponibles |
+| `public/app.html` | ▣ Imagen suplentes y disponibles | ▣ Imagen Equipo de apoyo y disponibles |
+| `public/app.html` | Solo suplente *(casilla del formulario)* | Solo persona de apoyo |
+| `server.js` | Este lector está configurado únicamente como suplente *(×3)* | Este lector está configurado únicamente como persona de apoyo |
+| `server.js` | La planificación intentó usar como titular a alguien que ya es suplente | ...a alguien que ya es persona de apoyo |
+| `server.js` | La planificación intentó usar a un titular como suplente | ...como persona de apoyo |
+| `server.js` | La planificación intentó colocar a un suplente en más de una misa | ...colocar a una persona de apoyo en más de una misa |
+| `server.js` | ...todas las funciones y un suplente por misa | ...y una persona de apoyo por misa |
+| `server.js` | ...durante el mes, como titular o suplente | ...como titular o como persona de apoyo |
+| `server.js` | Cada misa debe conservar al menos un suplente | Cada misa debe conservar al menos una persona de apoyo |
+| `common-vistas.js` | Suplente por definir *(×2)* | Apoyo por definir |
+| `common-vistas.js` | Suplentes: | Equipo de apoyo: |
+| `common-vistas.js` | Sin suplentes disponibles | Sin Equipo de apoyo disponible |
+| `common-vistas.js` | Solo suplentes *(contador)* | Solo apoyo |
+| `common-vistas.js` | Solo suplente *(insignia, ×2)* | Solo apoyo |
+| `common-vistas.js` | Sin suplentes asignados *(×2)* | Sin Equipo de apoyo asignado |
+| `common-vistas.js` | Suplentes de esta misa | Equipo de apoyo de esta misa |
+| `common-vistas.js` | ...no participa como titular ni suplente en... *(×2)* | ...ni como persona de apoyo en... |
+| `common-vistas.js` | Suplente · *(nombre de misa)* | Apoyo · *(nombre de misa)* |
+| `common-vistas.js` | Suplente de esta misa *(insignia)* | Apoyo de esta misa |
+| `common-vistas.js` | No hay suplentes en esta categoría. | No hay personas de apoyo en esta categoría. |
+| `common-vistas.js` | Titulares y suplentes por celebración | Titulares y Equipo de apoyo por celebración |
+| `common-vistas.js` | Suplentes, en orden: | Equipo de apoyo, en orden: |
+| `common-eventos.js` | ...se intentará llamar al siguiente suplente. | ...a la siguiente persona de apoyo. |
+| `common-eventos.js` | ...generar titulares y suplentes según disponibilidad? | ...y Equipo de apoyo según disponibilidad? |
+| `common-eventos.js` | Titulares y suplentes generados | Titulares y Equipo de apoyo generados |
+| `common-eventos.js` | Se asignó el siguiente suplente | Se llamó a la siguiente persona de apoyo |
+| `common-eventos.js` | Lista de suplentes actualizada | Equipo de apoyo actualizado |
+| `estadisticas.js` | · Solo suplente | · Solo apoyo |
+| `estadisticas.js` | Suplente *(etiqueta junto al nombre de la misa)* | Apoyo |
+| `estadisticas.js` | Solo suplentes *(contador)* | Solo apoyo |
+| `estadisticas.js` | Solo suplente *(insignia)* | Solo apoyo |
+| `estadisticas.js` | Pueden ser titulares o suplentes | Pueden ser titulares o personas de apoyo |
+| `estadisticas.js` | Disponibles únicamente como suplentes | Disponibles únicamente como personas de apoyo |
+| `estadisticas.js` | Solo suplentes *(título de acordeón)* | Solo personas de apoyo |
+| `estadisticas.js` | Ningún lector está configurado como solo suplente. | Ningún lector está configurado únicamente como persona de apoyo. |
+| `estadisticas.js` | ...para titular y 1 suplente... | ...para titular y 1 persona de apoyo... |
+| `common-reporte-tradicional.js` | Suplentes *(etiqueta del SVG)* | Equipo de apoyo |
+| `common-reporte-tradicional.js` | Sin suplentes asignados | Sin Equipo de apoyo asignado |
+| `common-reporte-tradicional.js` | Sin suplentes asignados durante este mes. | Sin Equipo de apoyo asignado durante este mes. |
+| `common-reporte-tradicional.js` | Suplentes y lectores sin asignación | Equipo de apoyo y lectores sin asignación |
+| `common-reporte-tradicional.js` | SUPLENTES ASIGNADOS POR MISA | EQUIPO DE APOYO ASIGNADO POR MISA |
+| `common-reporte-tradicional.js` | Solo suplente *(columna del PDF)* | Solo apoyo |
+| `common-reporte-tradicional.js` | `suplentes-y-disponibles-AAAA-MM.png` | `equipo-de-apoyo-y-disponibles-AAAA-MM.png` |
+
+Son **45 textos distintos en 6 archivos**, que suman **51 apariciones** porque algunos se repiten idénticos en varios puntos (marcados con *(×2)* o *(×3)* en la tabla).
+
+### Lo que NO se tocó, y por qué
+
+- **Los identificadores del código**: `substituteIds`, `substituteOnly`, `substitutes`, `substituteGroups` y el resto, unas 200 apariciones. `substituteIds` y `substituteOnly` **son nombres de campo de MongoDB**: renombrarlos obliga a migrar todos los documentos de asignación de todos los meses y los seis scripts, con riesgo real y cero beneficio para quien usa la aplicación, que nunca ve esos nombres.
+- **Las clases CSS**: `.substitute`, `.substitute-only`, `.substitute-controls`.
+- **Los nueve comentarios internos** que dicen «suplente» en `server.js` y `common-reporte-tradicional.js`. Se dejan a propósito, para que el vocabulario interno del código siga siendo coherente consigo mismo.
+- **La historia anterior de esta bitácora**, que es un registro de lo que se decidió en su momento.
+
+Queda entonces una equivalencia estable que conviene tener presente al leer el código: **lo que dentro se llama `substitute` es lo que fuera se llama Equipo de apoyo.**
+
+### Corrección de algo que se afirmó mal al evaluar el cambio
+
+Al estimar el trabajo se dijo que **las pruebas no dependían del texto en español**. Era falso. Al aplicar el cambio, `npm test` quedó en **39 aprobadas y 3 fallidas**: tres pruebas de `test/server.test.js` comprueban los mensajes de error con expresiones regulares.
+
+Se actualizaron esas cuatro expresiones:
+
+| Antes | Ahora |
+| --- | --- |
+| `/suplente en mas de una misa\|suplente en más de una misa/` | `/persona de apoyo en mas de una misa\|persona de apoyo en más de una misa/` |
+| `/titular como suplente/` *(×2)* | `/titular como persona de apoyo/` |
+| `/ya es suplente/` | `/ya es persona de apoyo/` |
+
+La lección: en este proyecto **los mensajes de error del servidor son contrato de las pruebas**, no solo texto de presentación. Cualquier cambio futuro de redacción en esos mensajes hay que buscarlo también en `test/server.test.js`.
+
+### Verificación
+
+- **Cero apariciones visibles de «suplente»** en los seis archivos, comprobado con un recuento que distingue comentarios de texto visible.
+- **Levantado el servidor real** contra el MongoDB en memoria y descargadas las páginas y los módulos que llegan al navegador: `/`, `/login.html`, `/asignar.html`, `/reporte.html`, `/cobertura.html` y los cuatro JavaScript del cliente. Las nueve respondieron **200**, con **0 apariciones de «suplente»** salvo los dos comentarios internos, y 48 del vocabulario nuevo.
+- `npm test`: **42 aprobadas, 0 fallidas**. `npm run format:check` limpio, `node --check` correcto y `git diff --check` sin errores.
+- **El SVG no se desborda**, comprobado leyendo el código en vez de suponerlo: el reporte de disponibilidad pasa todos sus textos por `traditionalFitSize()`, que mide con un canvas real y reduce el tamaño de letra hasta que entra. La única etiqueta sin ajuste automático es la del reporte tradicional, que pasa de «Suplentes» (~96 px) a «Equipo de apoyo» (~160 px) dentro de una banda de 1.552 px: sobra espacio.
+- `prettier` volvió a reformatear `common-vistas.js`, `estadisticas.js` y `common-reporte-tradicional.js` al cambiar la longitud de las cadenas. Por eso el diff de esos tres archivos es algo mayor que el número de cadenas tocadas.
+
+### Lo que falta comprobar
+
+**No se vio en un navegador real.** La comprobación fue estática y por HTTP. Conviene mirar en la aplicación desplegada las insignias de la tarjeta de lector, los contadores de Cobertura y los dos reportes, que es donde un texto más largo podría verse apretado en celular.
+
+**Puede quedar la palabra en los datos, no en el código.** Si alguna misa tiene una *función* llamada literalmente «Suplente», o alguna noticia usa la palabra, eso vive en MongoDB y hay que cambiarlo desde la aplicación. No se pudo comprobar porque el entorno bloquea leer la base de producción.
+
+### Cómo deshacerlo si el usuario se arrepiente
+
+El cambio va en **un commit propio y solo de texto**, sin ninguna modificación de lógica, de campos de MongoDB ni de datos. Revertirlo es seguro y no exige migración:
+
+```powershell
+git log --oneline --grep='vocabulario visible'   # da el hash del commit
+git revert <hash>
+git push origin main
+```
+
+Eso devuelve los 45 textos a «suplente» exactamente como estaban. Si en cambio se quiere revertir **solo algunas frases**, la tabla de arriba sirve de mapa: cada fila es independiente de las demás.
+
 ## Backlog al 23 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
