@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 22 de septiembre de 2026
+Última actualización: 23 de septiembre de 2026
 
 ## Objetivo
 
@@ -1945,7 +1945,103 @@ El botón **Instalar** solo aparece de verdad sobre HTTPS y en el navegador del 
 
 Chrome avisa que los formularios de contraseña deberían llevar un campo de usuario, aunque esté oculto, por accesibilidad. Es anterior a este cambio y afecta a los diálogos de contraseña de los lectores. Queda anotado en el backlog.
 
-## Backlog al 22 de septiembre de 2026
+## Continuidad retomada el 23 de septiembre de 2026
+
+### Revisión completa solicitada
+
+- El usuario pidió leer `CONTINUAR_PROYECTO.md` entera, revisar todo el código y decir en qué punto está el proyecto y con qué seguir.
+- Estado verificado al abrir: rama `main` sincronizada, árbol limpio, commit `698c314`. `npm test` en **39 aprobadas, 0 fallidas** y `npm run format:check` limpio.
+- **No se pudo leer la base de producción durante esta sesión**: el entorno bloqueó la conexión con el motivo *"Production Reads"*. Las cifras de datos que se manejaron siguen siendo las del 22 de septiembre. Si en el futuro conviene contrastar contra Atlas desde aquí, hay que permitirlo en los ajustes.
+
+### Dos ítems del backlog resultaron menos graves de lo anotado
+
+Al revisarlos con el código delante:
+
+- **`emptyCard` no escapa, pero sus cuatro llamadores pasan literales escritos a mano** (`common-vistas.js` líneas 248, 261, 347 y 353). No hay ningún camino por el que entre dato del usuario.
+- **Los nombres de misa del reporte tradicional sí se escapan.** `common-reporte-tradicional.js` línea 103 mete todo el texto del SVG por `esc()`. La anotación del 22 de septiembre sobre "tres nombres de misa sin `esc()`" no se pudo reproducir.
+
+Queda como higiene defensiva, no como pendiente serio.
+
+### La sospecha sobre la ruta `replacement` era cierta, y ya está corregida
+
+Era el único hallazgo del 22 de septiembre anotado como sospecha sin comprobar. Se comprobó, resultó cierto y se arregló en esta misma sesión.
+
+#### Qué estaba roto, en términos de la aplicación
+
+El desplegable **"Asignar lector…"** de Inicio, el que aparece dentro del acordeón de confirmaciones semanales cuando un puesto queda en **"Suplente por definir"**, llama a `POST /api/replacement`. El caso natural era:
+
+1. Un titular pulsa **"No puedo asistir"** y no hay suplente que lo cubra automáticamente.
+2. El puesto queda en `needs_replacement` y al administrador le aparece el desplegable.
+3. El administrador elige **a la persona que está en la banca de esa misma misa**, que es justo para lo que está de suplente.
+4. La aplicación respondía **400**: *"Cada persona solo puede pertenecer a una misa durante el mes, como titular o suplente"*.
+
+Es decir, **la única persona que tenía sentido elegir era precisamente la que el sistema rechazaba.**
+
+#### La comprobación, contra MongoDB real
+
+Se montó una sonda contra el mismo MongoDB en memoria que usa la suite, con la banca replicada en los cuatro documentos tal como la deja la aplicación:
+
+| Caso | Resultado antes del arreglo |
+| --- | --- |
+| Ascender a un suplente de la banca de la propia misa | **HTTP 400**, el titular no cambia, sigue en las 4 bancas |
+| Control: ascender a un lector libre | HTTP 200 |
+
+#### La causa
+
+La comprobación `otherUse` buscaba al lector en `substituteIds` de **todo el mes** sin distinguir si esa banca era la de la misma misa a la que se le estaba ascendiendo. Como la banca se replica en todos los documentos de la misa, el suplente siempre aparecía y siempre rebotaba.
+
+La prueba de que era un fallo y no una regla deliberada estaba en el propio código: justo después había un `$pull` escrito expresamente para sacarlo de la banca al ascenderlo. **Ese `$pull` nunca llegó a ejecutarse**, porque el error saltaba antes.
+
+#### La corrección
+
+Tres cambios en `server.js`, ninguno en el cliente:
+
+1. `otherUse` deja de considerar conflicto la banca de la **propia** misa: `{ substituteIds: reader.id, massId: { $ne: mass.id } }`. Seguir en la banca de **otra** misa del mes sigue bloqueando, que es la regla de verdad.
+2. El `$pull` de la rama que actualiza una asignación existente pasa de `{ massId, month, date }` a `{ massId, month }`. **Es exactamente la misma lección del rechazo corregido el 22 de septiembre**: la banca se replica en todas las fechas de la misa, así que limitar el `$pull` a un solo día dejaba al ascendido como titular y suplente a la vez en las demás fechas.
+3. La rama `id === 'new'` no tenía ningún `$pull`, así que se le agregó el mismo. Sin eso, ascender a un suplente a un puesto que todavía no existía como documento —el caso de *"Suplente por definir"* sin asignación previa— lo dejaba de titular y de suplente de la misma misa, violando la invariante.
+
+#### Tres pruebas nuevas
+
+| Prueba | Qué fija |
+| --- | --- |
+| Ascender a un suplente de la banca lo retira de la banca de todas las fechas | Regresión directa del fallo, sobre una asignación existente |
+| Ascender a un suplente a un puesto que todavía no existe también lo saca de la banca | Regresión de la rama `new` |
+| Un suplente de otra misa del mes sigue sin poder ascender aquí | Que el arreglo **no** aflojó la regla de una sola misa por persona |
+
+#### Comprobado en los dos sentidos
+
+- Con `server.js` revertido al estado anterior: **42 pruebas, 40 aprobadas, 2 fallidas**, y las dos que fallan son exactamente las dos de regresión. La tercera pasa en ambos sentidos, porque es una prueba de guardia y no de regresión: está ahí para avisar si algún día el arreglo se pasa de permisivo.
+- Restaurada la corrección, el `server.js` resultante es **byte a byte idéntico** al verificado antes de revertir.
+- `npm test`: **42 aprobadas, 0 fallidas** (39 anteriores más 3 nuevas). `npm run format:check` limpio, `node --check` correcto y `git diff --check` sin errores.
+- Reaparecido el detalle ya anotado el 22 de septiembre: `prettier --write` dejó `test/asignaciones.test.js` en una forma que `prettier --check` seguía rechazando. Se resolvió otra vez escribiendo la salida de `prettier <archivo>` sobre el archivo.
+
+#### Limitación honesta de esta corrección
+
+Lo comprobado es el comportamiento de la ruta contra MongoDB. **No se ejercitó el desplegable en un navegador real**, así que queda por confirmar en la aplicación desplegada que el flujo completo —rechazo, desplegable, ascenso— se ve correcto de punta a punta.
+
+### Orden recomendado para lo que queda
+
+Planteado al usuario al cerrar la revisión, y dejado aquí para no tener que reconstruirlo:
+
+1. **Rotar la credencial de Atlas.** Solo puede hacerlo el usuario y es el último bloqueo de seguridad.
+2. *Hecho hoy:* arreglar `replacement`.
+3. **Cambiar el borrado de lectores** para que vacíe el puesto y conserve el histórico. Es el único fallo que ha corrompido datos reales, y lo ha hecho dos veces.
+4. **Planificar diciembre de 2026** antes de que llegue.
+5. Decidir lo de las notas públicas y el CSV con nombres reales en un repositorio público.
+6. Deuda estructural: dividir `server.js` y desminificar el CSS.
+
+### Opinión sobre el código, anotada por si sirve más adelante
+
+Lo mejor del proyecto es `randomAssignments`: resuelve la planificación con un **emparejamiento de costo mínimo sobre un grafo de flujo**, de modo que llena el máximo de puestos posible y, entre todas las soluciones que llenan lo mismo, elige la que mejor rota titulares, suplentes y horarios. Un algoritmo codicioso habría dejado huecos evitables. También están bien resueltos las transacciones donde importan, la CSP sin `unsafe-inline`, la travesía de rutas cerrada con `path.relative`, el limitador por cuenta en vez de por IP y el hecho de que las pruebas vayan por HTTP contra el servidor real.
+
+Las reservas, por orden de fricción para seguir trabajando:
+
+1. `server.js` son 1.460 líneas y 72 KB en un archivo, excluido de Prettier y con líneas muy largas.
+2. `private/styles.css` está minificado a mano: 36 KB en 51 líneas, no editable con seguridad.
+3. `common-eventos.js` tiene 581 líneas con un único escuchador delegado.
+4. Conviven dos estilos de nombres: largos y descriptivos en el servidor, abreviados (`f`, `x`, `r`, `e`) en el cliente.
+
+## Backlog al 23 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
 
@@ -1966,8 +2062,8 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 ### Calidad
 
 - *Resuelto el 22 de septiembre:* **pruebas de integración de las reglas de asignación**. Once pruebas nuevas contra un MongoDB en memoria con conjunto de réplica, todas por HTTP contra el servidor real. Cubren exclusividad mensual, generación aleatoria y su reversión transaccional, rechazo con y sin suplente, Asignar no asignados, traslado de suplentes y permisos. La de regresión del rechazo se comprobó en los dos sentidos. Queda fuera de cobertura la propagación por alcance de los cambios manuales, que sigue siendo un buen siguiente paso.
-- **Verificar la sospecha sobre la ruta `replacement`** descrita en la sesión del 22 de septiembre.
-- **Escapar en `emptyCard` y en los tres nombres de misa de `common-vistas.js`**, por consistencia con el resto del cliente.
+- *Resuelto el 23 de septiembre:* **la sospecha sobre la ruta `replacement` era cierta**. Ascender a un suplente desde el desplegable de Inicio devolvía siempre 400 y el `$pull` posterior era código muerto. Corregido en tres puntos de `server.js` y fijado con tres pruebas, dos de ellas comprobadas en los dos sentidos. Queda confirmar el flujo en un navegador contra la aplicación desplegada.
+- **Escapar en `emptyCard`**, por consistencia con el resto del cliente. Revisado el 23 de septiembre: sus cuatro llamadores pasan literales escritos a mano, así que hoy no hay ningún camino por el que entre dato del usuario. Los nombres de misa del reporte tradicional **sí** se escapan, en `common-reporte-tradicional.js` línea 103; la anotación anterior sobre tres nombres sin `esc()` en `common-vistas.js` no se pudo reproducir.
 - **Mover las migraciones de un solo uso a `scripts/historicos/`.**
 - **Retirar el CSS muerto del formato tradicional.** `traditional-mass`, `traditional-column` y `traditional-reserves` quedaron sin uso al pasar la vista previa a SVG. Cuidado: el bloque que los contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí hace falta. La hoja está minificada y merece una revisión visual aparte.
 - **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado.

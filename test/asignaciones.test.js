@@ -407,6 +407,124 @@ test('al ascender a un suplente, Asignar no asignados lo retira de toda la banca
   assert.doesNotThrow(() => servidor.assertReadersBelongToSingleMass(documentos));
 });
 
+// --- Ascenso manual de un suplente ------------------------------------------
+
+// El desplegable "Asignar lector…" de Inicio llama a esta ruta. Antes rebotaba
+// siempre que se elegía a alguien de la banca de la propia misa, que es justo a
+// quien tiene sentido elegir: la comprobación de "una sola misa por persona" no
+// distinguía la banca propia de la ajena, y el $pull de después era código muerto.
+
+test('ascender a un suplente de la banca lo retira de la banca de todas las fechas', async () => {
+  const misa = await crearMisa({ nombre: 'Misa A', weekday: 0, roles: ['Primera', 'Salmo'] });
+  const [titularPrimera, titularSalmo, suplente] = await crearLectores(3, [misa.id]);
+  const fechas = servidor.massOccurrences(misa, MES);
+  assert.ok(fechas.length > 1, 'la misa debería celebrarse varias veces en el mes');
+
+  // La banca se replica en los cuatro documentos, tal como la deja la aplicación.
+  const documentosIniciales = fechas.flatMap(fecha => [
+    asignacion({ misa, fecha, role: 'Primera', readerId: titularPrimera.id, suplentes: [suplente.id] }),
+    asignacion({ misa, fecha, role: 'Salmo', readerId: titularSalmo.id, suplentes: [suplente.id] }),
+  ]);
+  const vacante = documentosIniciales[0];
+  vacante.readerId = null;
+  vacante.confirmationStatus = 'needs_replacement';
+  vacante.originalReaderId = titularPrimera.id;
+  await db.collection('assignments').insertMany(documentosIniciales);
+
+  const respuesta = await api('POST', `/api/replacement/${vacante.id}`, {
+    readerId: suplente.id,
+    massId: misa.id,
+    role: 'Primera',
+    date: vacante.date,
+    month: MES,
+  });
+  assert.equal(respuesta.status, 200, 'ascender a un suplente de la propia misa debe permitirse');
+
+  const documentos = await asignacionesDelMes();
+  const ascendido = documentos.find(documento => documento.id === vacante.id);
+  assert.equal(ascendido.readerId, suplente.id, 'el suplente debería haber quedado de titular');
+  assert.deepEqual(
+    bancasSinLector(documentos, suplente.id),
+    [],
+    'el ascendido no debe quedar en ninguna banca, ni la de las demás fechas de su misa',
+  );
+  assert.doesNotThrow(
+    () => servidor.assertReadersBelongToSingleMass(documentos),
+    'el estado posterior al ascenso debe seguir cumpliendo una misa por persona',
+  );
+});
+
+test('ascender a un suplente a un puesto que todavía no existe también lo saca de la banca', async () => {
+  const misa = await crearMisa({ nombre: 'Misa A', weekday: 0, roles: ['Primera', 'Salmo'] });
+  const [titularSalmo, suplente] = await crearLectores(2, [misa.id]);
+  const fechas = servidor.massOccurrences(misa, MES);
+
+  // Solo existe el Salmo: la Primera aún no tiene documento, y el desplegable de
+  // Inicio llama entonces a /api/replacement/new.
+  await db
+    .collection('assignments')
+    .insertMany(
+      fechas.map(fecha =>
+        asignacion({ misa, fecha, role: 'Salmo', readerId: titularSalmo.id, suplentes: [suplente.id] }),
+      ),
+    );
+
+  const respuesta = await api('POST', '/api/replacement/new', {
+    readerId: suplente.id,
+    massId: misa.id,
+    role: 'Primera',
+    date: fechas[0],
+    month: MES,
+  });
+  assert.equal(respuesta.status, 201, 'debería crear la asignación');
+
+  const documentos = await asignacionesDelMes();
+  assert.ok(
+    documentos.some(documento => documento.role === 'Primera' && documento.readerId === suplente.id),
+    'el suplente debería aparecer como titular de la Primera',
+  );
+  assert.deepEqual(
+    bancasSinLector(documentos, suplente.id),
+    [],
+    'quien asciende no puede seguir en la banca de su propia misa',
+  );
+  assert.doesNotThrow(() => servidor.assertReadersBelongToSingleMass(documentos));
+});
+
+test('un suplente de otra misa del mes sigue sin poder ascender aquí', async () => {
+  const primera = await crearMisa({ nombre: 'Misa A', weekday: 0, roles: ['Primera'] });
+  const segunda = await crearMisa({ nombre: 'Misa B', weekday: 6, roles: ['Primera'] });
+  const [titularA, titularB, suplenteDeB] = await crearLectores(3, [primera.id, segunda.id]);
+  const [fechaA] = servidor.massOccurrences(primera, MES);
+  const [fechaB] = servidor.massOccurrences(segunda, MES);
+
+  const vacante = asignacion({ misa: primera, fecha: fechaA, role: 'Primera', readerId: null });
+  vacante.confirmationStatus = 'needs_replacement';
+  vacante.originalReaderId = titularA.id;
+  await db.collection('assignments').insertMany([
+    vacante,
+    asignacion({
+      misa: segunda,
+      fecha: fechaB,
+      role: 'Primera',
+      readerId: titularB.id,
+      suplentes: [suplenteDeB.id],
+    }),
+  ]);
+
+  const respuesta = await api('POST', `/api/replacement/${vacante.id}`, {
+    readerId: suplenteDeB.id,
+    massId: primera.id,
+    role: 'Primera',
+    date: fechaA,
+    month: MES,
+  });
+  assert.equal(respuesta.status, 400, 'la banca de OTRA misa debe seguir bloqueando');
+
+  const documento = await db.collection('assignments').findOne({ id: vacante.id });
+  assert.equal(documento.readerId, null, 'el puesto debe quedar como estaba');
+});
+
 // --- Edición de suplentes ---------------------------------------------------
 
 test('poner a alguien de suplente lo retira de la banca de otra misa del mes', async () => {

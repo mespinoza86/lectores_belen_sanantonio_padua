@@ -1195,7 +1195,10 @@ async function api(req, res, url) {
       const otherUse = await database.collection('assignments').findOne({
         month: replacementMonth,
         ...(assignment ? { id: { $ne: assignment.id } } : {}),
-        $or: [{ readerId: reader.id }, { substituteIds: reader.id }]
+        // Estar en la banca de ESTA misma misa no es un conflicto: de eso se trata
+        // ascender a un suplente, y el $pull de mas abajo lo saca de ella. Solo debe
+        // bloquear pertenecer a OTRA misa del mes, como titular o como suplente.
+        $or: [{ readerId: reader.id }, { substituteIds: reader.id, massId: { $ne: mass.id } }]
       });
       if (otherUse) throw new Error('Cada persona solo puede pertenecer a una misa durante el mes, como titular o suplente');
       const duplicate = await database.collection('assignments').findOne({
@@ -1209,6 +1212,10 @@ async function api(req, res, url) {
         const document = { id: crypto.randomUUID(), massId: mass.id, readerId: reader.id, role, date, month,
           substituteIds: [], confirmationStatus: 'pending', createdAt: new Date() };
         await database.collection('assignments').insertOne(document);
+        await database.collection('assignments').updateMany(
+          { massId: mass.id, month },
+          { $pull: { substituteIds: reader.id } }
+        );
         return json(res, 201, publicDoc(document));
       }
       if (!assignment) throw new Error('Asignación inválida');
@@ -1217,8 +1224,11 @@ async function api(req, res, url) {
         { $set: { readerId: reader.id, confirmationStatus: 'pending' }, $unset: { confirmedAt: '' } },
         { returnDocument: 'after' }
       );
+      // Sin la fecha: la banca se replica en todas las celebraciones de la misa
+      // durante el mes, asi que limitar el $pull a un solo dia dejaba al ascendido
+      // como titular y suplente a la vez en las demas fechas.
       await database.collection('assignments').updateMany(
-        { massId: assignment.massId, month: assignment.month, date: assignment.date },
+        { massId: assignment.massId, month: assignment.month },
         { $pull: { substituteIds: reader.id } }
       );
       return json(res, 200, publicDoc(updated));
