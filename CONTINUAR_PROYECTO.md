@@ -2156,6 +2156,91 @@ git push origin main
 
 Eso devuelve los 45 textos a «suplente» exactamente como estaban. Si en cambio se quiere revertir **solo algunas frases**, la tabla de arriba sirve de mapa: cada fila es independiente de las demás.
 
+## Cierre de la sesión del 23 de septiembre de 2026
+
+Sesión larga, de tres tramos. Esta sección es el punto de partida para el día siguiente: qué quedó hecho, qué quedó verificado, qué NO se pudo comprobar y con qué seguir.
+
+### Los tres tramos de hoy
+
+| # | Tramo | Commit |
+| --- | --- | --- |
+| 1 | Revisión completa del proyecto pedida por el usuario: bitácora entera, todo el código, la suite y el estado del repositorio | *(sin commit, quedó escrito en la bitácora)* |
+| 2 | Corrección de la ruta `replacement`, con tres pruebas nuevas | `f3c99a6` |
+| 3 | Cambio de vocabulario de «suplente» a «Equipo de apoyo» | `9d2a58d` |
+
+### Estado verificado al cerrar
+
+| Comprobación | Resultado |
+| --- | --- |
+| Rama `main` vs `origin/main` | sincronizada, árbol limpio |
+| Commit más reciente | **`9d2a58d`**, empujado y desplegable desde Render |
+| `npm test` | **42 aprobadas, 0 fallidas** |
+| `npm run format:check` | limpio |
+| `node --check` | correcto en `server.js`, los módulos de `private/js` y la suite |
+| `git diff --check` | sin errores |
+
+La suite pasó de 39 a 42 pruebas: las tres de regresión del ascenso de una persona de apoyo.
+
+### El usuario revisó el resultado
+
+Al terminar el cambio de vocabulario el usuario respondió **«se ve bien»**. No quedó constancia de si lo miró en la aplicación desplegada o en local, ni de si lo revisó en celular, así que **la comprobación en celular sigue anotada como pendiente** más abajo.
+
+### Hallazgo de cierre: la familia de fallos del `$pull` está cerrada
+
+Dos fallos distintos de este proyecto —el del rechazo (22 de septiembre) y el del ascenso (hoy)— tenían la misma causa: un `$pull` sobre `substituteIds` **filtrado por una sola fecha**, cuando la banca se replica en todas las celebraciones de la misa durante el mes. Como ya iban dos, se auditaron **los siete `$pull` sobre `substituteIds` que hay en `server.js`**:
+
+| Filtro | Dónde | ¿Correcto? |
+| --- | --- | --- |
+| `{ month, substituteIds }` | perfil del lector | Sí |
+| `{ massId, month }` | rechazo | Sí, corregido el 22 |
+| `{ massId, month }` | ascenso, rama nueva | Sí, agregado hoy |
+| `{ massId, month }` | ascenso, rama existente | Sí, corregido hoy |
+| `{ month, massId: { $ne }, substituteIds: { $in } }` | edición del Equipo de apoyo | Sí |
+| `{ month, substituteIds }` | cambio manual de asignación | Sí |
+| `{ substituteIds }` sin filtro | borrado de lector | Sí, debe alcanzar todo |
+
+**Ninguno queda filtrado por una sola fecha.** La familia está cerrada.
+
+Cuidado con dos que sí llevan fecha y **no hay que «corregir»**: los de `{ date: { $gte: today } }` en el cambio de preferencias y en el borrado de lector. Ahí la fecha es deliberada, porque solo deben tocar el futuro y no reescribir la historia.
+
+### Dónde estamos como producto
+
+- Desplegado en Render, con HTTPS y `NODE_ENV=production`.
+- Instalable desde Chrome, con el escudo de la Diaconía.
+- 42 pruebas de integración contra un MongoDB en memoria, todas por HTTP contra el servidor real.
+- Planificación generada hasta **noviembre de 2026**.
+- **Diciembre de 2026 sigue sin planificar.** Es lo más inminente por calendario.
+
+Las cifras de datos siguen siendo las del 22 de septiembre —43 lectores, 33 activos, agosto 120, septiembre 92 con 4 huecos, octubre 104, noviembre 112— porque **hoy no se pudo leer la base de producción**: el entorno bloqueó la conexión con el motivo *"Production Reads"*. Si conviene contrastar contra Atlas desde aquí en próximas sesiones, hay que permitirlo en los ajustes.
+
+### Con qué seguir mañana, en orden
+
+**1. Rotar la credencial de MongoDB.** Solo puede hacerlo el usuario, desde Atlas, y luego actualizarla en `.env` y en las variables de entorno de Render. Es el pendiente más antiguo y el **único bloqueo de seguridad** que queda para dar el proyecto por listo.
+
+**2. Confirmar en un navegador los dos cambios de hoy.** Ninguno se vio en un navegador real; ambos se verificaron contra MongoDB y por HTTP. En concreto:
+
+- *Del ascenso:* provocar un **«No puedo asistir»** en una misa, y desde Inicio elegir en el desplegable **«Asignar lector…»** a alguien que esté en el Equipo de apoyo de esa misma misa. Antes daba error rojo; ahora debe ascender y desaparecer de la banca de todas las fechas del mes.
+- *Del vocabulario:* mirar **en celular** las insignias de la tarjeta de lector, los contadores de Cobertura y los dos reportes, que es donde un texto más largo podría verse apretado.
+
+**3. Cambiar el borrado de lectores.** Es el único fallo que ha corrompido datos reales, y lo ha hecho dos veces: la lectora Ana en agosto y los cuatro huecos de septiembre. Hoy `DELETE /api/readers` ejecuta `deleteMany({ readerId: id })` sobre todos los meses, incluidos los pasados. Dos caminos posibles, sin decidir:
+
+- **Vaciar el puesto en vez de borrarlo**: poner `readerId: null` y `confirmationStatus: 'needs_replacement'` en las asignaciones futuras, y **dejar intactas las pasadas**, para que el historial siga siendo cierto. Es lo que ya hace el rechazo, así que el patrón está escrito.
+- **Empujar desde la interfaz hacia «Desactivar»** en lugar de «Eliminar», dejando el borrado para casos excepcionales y con una advertencia explícita de lo que se pierde.
+
+Sea cual sea, conviene una prueba de integración que fije que **borrar o desactivar a alguien no toca los meses pasados**.
+
+**4. Planificar diciembre de 2026** antes de que llegue.
+
+**5. Las dos decisiones de privacidad que llevan pendientes desde julio:** si las notas de los lectores siguen siendo públicas (`publicDoc` no las filtra; la corrección es una línea, falta la decisión) y si el repositorio público debe seguir conteniendo `data/lectores_reales_revision.csv` con los 30 nombres reales y su disponibilidad.
+
+**6. Deuda estructural**, cuando haya margen: dividir `server.js` (1.460 líneas, 72 KB, excluido de Prettier) y desminificar `private/styles.css` (36 KB en 51 líneas, hoy no editable con seguridad).
+
+### Tres lecciones de esta sesión
+
+1. **Los mensajes de error del servidor son contrato de las pruebas.** Cuatro expresiones regulares de `test/server.test.js` los comprueban literalmente. Al evaluar el cambio de vocabulario se afirmó que las pruebas no dependían del texto: era falso, y se descubrió cuando la suite cayó a 39 aprobadas y 3 fallidas. Cualquier cambio futuro de redacción en esos mensajes hay que buscarlo también en la suite.
+2. **Una sospecha anotada vale, pero solo comprobada sirve.** La de `replacement` llevaba un día escrita como «sin comprobar». Montarla contra MongoDB costó minutos y reveló además un caso que el diagnóstico no había previsto: la rama `id === 'new'`, que no tenía `$pull` ninguno.
+3. **Un guion de sustitución con recuento esperado por cadena atrapa los errores antes de escribir nada.** El del vocabulario falló dos veces a propósito —una etiqueta que no estaba dos veces, otra con distinto marcado— y no tocó ningún archivo hasta que las 45 cuentas cuadraron. El recuento final descubrió además dos cadenas en mayúsculas que el inventario inicial no había visto.
+
 ## Backlog al 23 de septiembre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
@@ -2179,6 +2264,9 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 - *Resuelto el 22 de septiembre:* **pruebas de integración de las reglas de asignación**. Once pruebas nuevas contra un MongoDB en memoria con conjunto de réplica, todas por HTTP contra el servidor real. Cubren exclusividad mensual, generación aleatoria y su reversión transaccional, rechazo con y sin suplente, Asignar no asignados, traslado de suplentes y permisos. La de regresión del rechazo se comprobó en los dos sentidos. Queda fuera de cobertura la propagación por alcance de los cambios manuales, que sigue siendo un buen siguiente paso.
 - *Resuelto el 23 de septiembre:* **la sospecha sobre la ruta `replacement` era cierta**. Ascender a un suplente desde el desplegable de Inicio devolvía siempre 400 y el `$pull` posterior era código muerto. Corregido en tres puntos de `server.js` y fijado con tres pruebas, dos de ellas comprobadas en los dos sentidos. Queda confirmar el flujo en un navegador contra la aplicación desplegada.
 - **Escapar en `emptyCard`**, por consistencia con el resto del cliente. Revisado el 23 de septiembre: sus cuatro llamadores pasan literales escritos a mano, así que hoy no hay ningún camino por el que entre dato del usuario. Los nombres de misa del reporte tradicional **sí** se escapan, en `common-reporte-tradicional.js` línea 103; la anotación anterior sobre tres nombres sin `esc()` en `common-vistas.js` no se pudo reproducir.
+- **Confirmar en un navegador real los dos cambios del 23 de septiembre**: el ascenso de una persona de apoyo desde el desplegable de Inicio, y el vocabulario nuevo en celular (insignias de la tarjeta de lector, contadores de Cobertura y los dos reportes).
+- **Comprobar si la palabra «suplente» quedó en los datos.** Si alguna misa tiene una *función* llamada literalmente así, o alguna noticia la usa, vive en MongoDB y hay que cambiarlo desde la aplicación. No se pudo comprobar el 23 de septiembre porque el entorno bloquea leer la base de producción.
+- **Anotar la URL de la aplicación desplegada en Render**, que no consta en el repositorio. Sin ella no se pueden verificar las cabeceras de producción ni el botón Instalar.
 - **Mover las migraciones de un solo uso a `scripts/historicos/`.**
 - **Retirar el CSS muerto del formato tradicional.** `traditional-mass`, `traditional-column` y `traditional-reserves` quedaron sin uso al pasar la vista previa a SVG. Cuidado: el bloque que los contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí hace falta. La hoja está minificada y merece una revisión visual aparte.
 - **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado.
