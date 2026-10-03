@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 23 de septiembre de 2026
+Última actualización: 2 de octubre de 2026
 
 ## Objetivo
 
@@ -2241,15 +2241,81 @@ Sea cual sea, conviene una prueba de integración que fije que **borrar o desact
 2. **Una sospecha anotada vale, pero solo comprobada sirve.** La de `replacement` llevaba un día escrita como «sin comprobar». Montarla contra MongoDB costó minutos y reveló además un caso que el diagnóstico no había previsto: la rama `id === 'new'`, que no tenía `$pull` ninguno.
 3. **Un guion de sustitución con recuento esperado por cadena atrapa los errores antes de escribir nada.** El del vocabulario falló dos veces a propósito —una etiqueta que no estaba dos veces, otra con distinto marcado— y no tocó ningún archivo hasta que las 45 cuentas cuadraron. El recuento final descubrió además dos cadenas en mayúsculas que el inventario inicial no había visto.
 
-## Backlog al 23 de septiembre de 2026
+## Continuidad retomada el 2 de octubre de 2026
+
+Nueve días sin tocar el repositorio. El usuario preguntó si la bitácora estaba al día; lo estaba en cuanto al código, pero no en cuanto a lo que pasó fuera de él.
+
+### Estado del repositorio al abrir: idéntico al cierre del 23 de septiembre
+
+| Comprobación | Resultado |
+| --- | --- |
+| Último commit | `89977ac`, del 23 de septiembre a las 22:40 |
+| Rama `main` vs `origin/main` | sincronizada, árbol limpio |
+| `npm test` | **42 aprobadas, 0 fallidas** |
+| `npm run format:check` | limpio |
+| Cadenas visibles con «suplente» | **0** |
+
+Ningún commit nuevo en nueve días: el código está exactamente como se dejó.
+
+### Lo que sí cambió, fuera del repositorio
+
+Confirmado por el usuario al abrir esta sesión:
+
+| Pendiente del 23 de septiembre | Estado al 2 de octubre |
+| --- | --- |
+| Rotar la credencial de MongoDB en Atlas | **HECHO** |
+| Confirmar el vocabulario nuevo en celular | **HECHO**, se ve bien |
+| Confirmar el ascenso desde el desplegable de Inicio | **Sigue pendiente** |
+| Planificar diciembre de 2026 | **HECHO** por el usuario desde la aplicación |
+
+Además, durante estos nueve días el usuario **agregó o quitó lectores** y **cambió asignaciones a mano**.
+
+### La credencial de Atlas quedó rotada: se acabó el bloqueo de seguridad
+
+Era **el pendiente más antiguo del proyecto**, abierto desde julio, y el único que quedaba impidiendo considerar la aplicación lista para producción. Con Render ya configurado el 22 de septiembre y la credencial rotada ahora, **la lista de seguridad bloqueante queda vacía.**
+
+Lo que quedaba en esa lista pasa a ser **decisión, no bloqueo**: si las notas de los lectores siguen siendo públicas y si el repositorio público debe seguir conteniendo `data/lectores_reales_revision.csv`.
+
+Detalle a verificar la próxima vez que se levante el servidor en local: que **`MONGODB_URI` del `.env` local también se actualizó** con la credencial nueva. Si solo se cambió en Atlas y en Render, el arranque local fallará con un error de autenticación. No se pudo comprobar desde aquí.
+
+### Riesgo abierto: se agregaron o quitaron lectores, y eliminar borra el historial
+
+Esto es lo que más conviene mirar, y conviene mirarlo pronto.
+
+`DELETE /api/readers` ejecuta `deleteMany({ readerId: id })` sobre **todos los meses, incluidos los pasados**, en vez de dejar el puesto vacante. Ya pasó dos veces:
+
+- **Agosto de 2026**, con la lectora Ana: hueco detectado el 1 de septiembre.
+- **Septiembre de 2026**: los cuatro huecos detectados el 22 de septiembre, uno por domingo y cada vez de una función distinta, que es la firma inconfundible de una sola persona eliminada.
+
+El usuario confirma que volvió a agregar o quitar lectores. **Si alguno se eliminó en vez de desactivarse, es muy probable que haya vuelto a pasar**, y esta vez puede afectar a octubre, noviembre y al diciembre recién planificado, además de borrar silenciosamente asignaciones de meses ya celebrados.
+
+Qué revisar, y en este orden:
+
+1. **Huecos en octubre, noviembre y diciembre**: puestos sin titular. El patrón delator es una función distinta en cada fecha de la misma misa.
+2. **Agujeros en los meses pasados** (agosto y septiembre), que son pérdida de historial y no se recuperan solos.
+3. Si aparecen huecos, decidir si se rellenan con **Asignar no asignados** o a mano.
+
+No se pudo comprobar desde aquí: **el entorno sigue bloqueando la lectura de la base de producción** con el motivo *"Production Reads"*. Hay dos caminos: permitirlo en los ajustes para poder contrastarlo desde aquí, o que el usuario lo mire desde la propia aplicación, mes por mes.
+
+### Los datos ya no coinciden con lo registrado
+
+Las cifras que arrastra la bitácora son las del 22 de septiembre —43 lectores, 33 activos, agosto 120, septiembre 92 con 4 huecos, octubre 104, noviembre 112— y **hay que darlas por caducadas**: el padrón cambió, hubo ediciones manuales y diciembre se generó. La próxima vez que se pueda leer la base, conviene volver a levantar la foto completa y dejarla escrita aquí.
+
+### El calendario movió las prioridades
+
+- **Septiembre terminó.** Sus cuatro huecos ya son historia: no hay nada que decidir, y la decisión abierta que los mencionaba se cierra sola.
+- **Octubre es el mes en curso.** Es el que la gente está consultando a diario, así que cualquier hueco ahí se nota de inmediato.
+- **Diciembre ya está planificado**, así que el pendiente de calendario más próximo pasa a ser **enero de 2027**.
+
+## Backlog al 2 de octubre de 2026
 
 Lista viva de lo pendiente. Está al final a propósito, para poder responder de un vistazo en qué punto está el proyecto sin leer toda la bitácora.
 
 ### Seguridad, antes de considerarlo listo para producción
 
-- **Rotar la credencial de MongoDB** compartida en julio y actualizarla en `.env` y en las variables de entorno de Render. **Solo puede hacerlo el usuario**, desde Atlas. Es el pendiente más antiguo y el de mayor riesgo. **Sigue pendiente al 22 de septiembre**, confirmado por el usuario esa misma tarde: con Render ya resuelto, es el único pendiente de seguridad que bloquea el paso a producción.
+- *Resuelto el 2 de octubre:* **rotar la credencial de MongoDB** compartida en julio. Confirmado por el usuario. Era el pendiente más antiguo del proyecto y el último bloqueo de seguridad para producción: **esta lista ya no bloquea nada.** Queda por verificar que el `MONGODB_URI` del `.env` local también se actualizó, o el arranque en local fallará.
 - *Resuelto el 22 de septiembre:* **`NODE_ENV=production` y HTTPS en el alojamiento**, confirmado por el usuario. De eso dependen el atributo `Secure` de la cookie y la cabecera HSTS. No se comprobó contra la URL desplegada porque esa dirección no está registrada en el repositorio; conviene anotarla para poder verificar las cabeceras de producción en el futuro.
-- **Decidir si las notas de los lectores siguen siendo públicas.** Pendiente desde julio. La corrección es una línea en `publicDoc`; falta la decisión, no el código.
+- **Decidir si las notas de los lectores siguen siendo públicas.** Pendiente desde julio. La corrección es una línea en `publicDoc`; falta la decisión, no el código. Desde el 2 de octubre es **decisión y no bloqueo**: ningún lector tiene notas escritas, así que el camino está abierto pero el dato no existe.
 - **Decidir si el repositorio público debe seguir conteniendo `data/lectores_reales_revision.csv`** con los 30 nombres reales y su disponibilidad.
 - *Resuelto el 1 de septiembre:* el limitador del acceso administrativo.
 
@@ -2257,16 +2323,19 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 
 - **Sustitución acordada para una celebración específica.** Diseñada el 4 de agosto, sin implementar; el usuario decidió el 31 de agosto dejarla en el backlog. El diseño completo está en la sección *Propuesta pendiente: sustitución acordada para una celebración específica*.
 - **Misas especiales fuera de la rotación.** El generador trata una celebración única como una misa más y exige cuatro personas exclusivas para ella, restándolas del resto del mes.
-- **Eliminar un lector borra su historial completo.** `DELETE /api/readers` elimina todas sus asignaciones de todos los meses, incluidos los pasados, en vez de dejar el puesto vacante. Ya provocó el agujero de agosto con la lectora Ana y los cuatro huecos de septiembre detectados el 22 de septiembre. Convendría que eliminar vaciara el puesto y conservara el documento, o que la interfaz empujara claramente hacia desactivar en vez de eliminar.
+- **Eliminar un lector borra su historial completo.** `DELETE /api/readers` elimina todas sus asignaciones de todos los meses, incluidos los pasados, en vez de dejar el puesto vacante. Ya provocó el agujero de agosto con la lectora Ana y los cuatro huecos de septiembre. **El 2 de octubre el usuario confirmó que volvió a agregar o quitar lectores, así que puede haber pasado una tercera vez**, ahora sobre octubre, noviembre o el diciembre recién planificado. Es el fallo de mayor impacto que queda y conviene atacarlo antes que cualquier otra cosa. Dos caminos esbozados: vaciar el puesto conservando los meses pasados —igual que hace el rechazo—, o empujar desde la interfaz hacia «Desactivar». Cualquiera de los dos pide una prueba de integración que fije que borrar no toca el pasado.
 
 ### Calidad
 
 - *Resuelto el 22 de septiembre:* **pruebas de integración de las reglas de asignación**. Once pruebas nuevas contra un MongoDB en memoria con conjunto de réplica, todas por HTTP contra el servidor real. Cubren exclusividad mensual, generación aleatoria y su reversión transaccional, rechazo con y sin suplente, Asignar no asignados, traslado de suplentes y permisos. La de regresión del rechazo se comprobó en los dos sentidos. Queda fuera de cobertura la propagación por alcance de los cambios manuales, que sigue siendo un buen siguiente paso.
 - *Resuelto el 23 de septiembre:* **la sospecha sobre la ruta `replacement` era cierta**. Ascender a un suplente desde el desplegable de Inicio devolvía siempre 400 y el `$pull` posterior era código muerto. Corregido en tres puntos de `server.js` y fijado con tres pruebas, dos de ellas comprobadas en los dos sentidos. Queda confirmar el flujo en un navegador contra la aplicación desplegada.
 - **Escapar en `emptyCard`**, por consistencia con el resto del cliente. Revisado el 23 de septiembre: sus cuatro llamadores pasan literales escritos a mano, así que hoy no hay ningún camino por el que entre dato del usuario. Los nombres de misa del reporte tradicional **sí** se escapan, en `common-reporte-tradicional.js` línea 103; la anotación anterior sobre tres nombres sin `esc()` en `common-vistas.js` no se pudo reproducir.
-- **Confirmar en un navegador real los dos cambios del 23 de septiembre**: el ascenso de una persona de apoyo desde el desplegable de Inicio, y el vocabulario nuevo en celular (insignias de la tarjeta de lector, contadores de Cobertura y los dos reportes).
+- **Confirmar en un navegador el ascenso de una persona de apoyo** desde el desplegable «Asignar lector…» de Inicio: provocar un «No puedo asistir» y elegir a alguien del Equipo de apoyo de esa misma misa. Es lo único de los cambios del 23 de septiembre que no se ha visto funcionar. *El vocabulario nuevo sí quedó confirmado en celular el 2 de octubre: se ve bien.*
 - **Comprobar si la palabra «suplente» quedó en los datos.** Si alguna misa tiene una *función* llamada literalmente así, o alguna noticia la usa, vive en MongoDB y hay que cambiarlo desde la aplicación. No se pudo comprobar el 23 de septiembre porque el entorno bloquea leer la base de producción.
 - **Anotar la URL de la aplicación desplegada en Render**, que no consta en el repositorio. Sin ella no se pueden verificar las cabeceras de producción ni el botón Instalar.
+- **Revisar si quedaron huecos tras los cambios de lectores de finales de septiembre.** Octubre, noviembre y diciembre primero; después agosto y septiembre, por si se perdió historial. Detallado en la sección del 2 de octubre.
+- **Volver a levantar la foto de la base y dejarla escrita.** Las cifras registradas son del 22 de septiembre y están caducadas: cambió el padrón, hubo ediciones manuales y se planificó diciembre.
+- **Planificar enero de 2027.** Diciembre quedó generado por el usuario, así que es el siguiente del calendario.
 - **Mover las migraciones de un solo uso a `scripts/historicos/`.**
 - **Retirar el CSS muerto del formato tradicional.** `traditional-mass`, `traditional-column` y `traditional-reserves` quedaron sin uso al pasar la vista previa a SVG. Cuidado: el bloque que los contiene todavía incluye la regla que oculta la vista previa al imprimir el **PDF actual**, que sí hace falta. La hoja está minificada y merece una revisión visual aparte.
 - **Formatear `server.js` y `public/app.html`** en un commit aparte. Están excluidos en `.prettierignore` con el motivo anotado.
@@ -2277,4 +2346,4 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 ### Decisión abierta
 
 - **Tamaño de letra del PDF tradicional.** Al caber el mes completo en una hoja, el texto se imprime a unos 6 pt. Si resulta pequeño en papel, se vuelve a dos hojas horizontales con letra casi del doble: es cambiar `pageWidthMm` y `pageHeightMm` y volver a repartir por altura, algo que ya estuvo implementado y está descrito en la sección del SVG.
-- **Los cuatro huecos de septiembre de 2026.** El usuario decidió el 22 de septiembre no rellenarlos por ahora. Solo el del domingo 27 (Salmo, Misa domingo 7:00 a. m.) seguía siendo servible en esa fecha.
+- *Cerrada por el calendario el 2 de octubre:* **los cuatro huecos de septiembre de 2026.** El usuario decidió el 22 de septiembre no rellenarlos; septiembre terminó y ya no hay nada que decidir.
