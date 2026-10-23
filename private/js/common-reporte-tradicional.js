@@ -259,26 +259,8 @@ function traditionalSvgDataUrl(svg) {
   return 'data:image/svg+xml;base64,' + btoa(binary);
 }
 function printCurrentReport() {
-  const target = document.createElement('div');
-  target.id = 'currentPrintReport';
-  target.innerHTML = $('#reportContent').innerHTML;
-  const style = document.createElement('style');
-  style.textContent = `#currentPrintReport{position:absolute;left:-10000px;top:0;width:192mm;background:white;color:#111}
-    @media print{@page{size:A4 portrait;margin:8mm}body.print-current-fit>*:not(#currentPrintReport){display:none!important}body.print-current-fit #currentPrintReport{position:static;display:block!important;margin:0 auto}.report-mass{break-inside:auto}}`;
-  document.head.append(style);
-  document.body.append(target);
-  const height = target.getBoundingClientRect().height;
-  target.style.zoom = Math.min(1, (278 * 96) / 25.4 / Math.max(1, height));
-  document.body.classList.add('print-current-fit');
-  window.addEventListener(
-    'afterprint',
-    () => {
-      document.body.classList.remove('print-current-fit');
-      target.remove();
-      style.remove();
-    },
-    { once: true },
-  );
+  // El reporte actual usa el HTML visible y su paginación natural, sin reducir
+  // la letra. Solo los reportes SVG se ajustan a una única página.
   window.print();
 }
 function printTraditionalReport() {

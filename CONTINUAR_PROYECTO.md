@@ -2357,3 +2357,12 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 - **Decisión expresa del usuario: mantener una sola página**, incluso si con muchos nombres se reduce el tamaño de letra. No se implementó paginación múltiple.
 - Se agregaron tres pruebas en `test/reportes.test.js`: filtrado mensual, grupos de disponibilidad en una misa sin apoyo y ajuste del SVG tradicional con listas extensas. La suite incluye este archivo mediante `npm test`.
 - No se modificaron datos de producción ni se desplegó. Pendiente revisar visualmente PDF e imagen con los datos actuales; las pruebas de dimensiones SVG no sustituyen la comprobación de impresión en navegador.
+
+### Ajuste posterior: PDF actual legible y disponibles en pantalla
+
+- El usuario cambió el requisito **únicamente para PDF actual**: puede ocupar varias páginas para conservar la legibilidad. Se retiró la copia con `zoom` y se recuperó la impresión natural del HTML con los estilos existentes de A4 y saltos por misa.
+- PDF tradicional y PDF de Equipo de apoyo y disponibles siguen ajustados a una sola hoja. Las imágenes y sus generadores no cambian.
+- Los dos grupos de disponibles ahora forman parte directa del HTML de cada misa en la pantalla Reporte, compartido con PDF actual. Antes se agregaban mediante una segunda pasada por el DOM; se retiró esa dependencia y se agregó una prueba de renderizado y recálculo mensual.
+- Se agregó una prueba que impide volver a crear el contenedor reducido al imprimir PDF actual. La suite anterior había terminado con 45 pruebas aprobadas y formato correcto.
+- Verificación final de este ajuste: **47 pruebas aprobadas, 0 fallidas**, `npm run format:check` correcto y `git diff --check` sin errores (solo advertencia de conversión LF/CRLF en la bitácora).
+- No se cambian asignaciones ni datos de producción. La revisión visual de impresión en navegador y el despliegue siguen pendientes.

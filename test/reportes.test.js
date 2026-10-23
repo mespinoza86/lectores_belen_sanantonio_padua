@@ -76,3 +76,32 @@ test('Tradicional conserva los dos grupos y ajusta incluso listas extensas a una
   assert.ok(Number(dimensions[1]) <= 192);
   assert.ok(Number(dimensions[2]) <= 278);
 });
+
+test('La pantalla Reporte incluye disponibles directamente y se recalcula al cambiar el mes', () => {
+  const c = fixture();
+  const target = { innerHTML: '' };
+  c.$ = selector => (selector === '#reportContent' ? target : null);
+  c.state.masses[0].roles = [];
+  c.allEvents = () => [{ mass: c.state.masses[0], date: '2026-10-04' }];
+  vm.runInContext(fs.readFileSync('private/js/common-vistas.js', 'utf8'), c);
+  c.renderReport();
+  assert.match(target.innerHTML, /Sin asignación · Prefieren esta misa:/);
+  assert.match(target.innerHTML, /Sin asignación · Pueden ayudar:/);
+  assert.match(target.innerHTML, /<b>Preferida<\/b>/);
+  assert.match(target.innerHTML, /<b>Alternativa<\/b>/);
+  assert.doesNotMatch(target.innerHTML, /Inactiva|Imposible/);
+  c.state.month = '2026-11';
+  c.renderReport();
+  assert.match(target.innerHTML, /Alternativa · Apoyo · Titular/);
+});
+
+test('PDF actual imprime sin copia reducida ni ajuste a una sola hoja', () => {
+  const c = fixture();
+  let prints = 0;
+  c.window = { print: () => prints++ };
+  c.document.createElement = () => {
+    throw new Error('No debe crear un contenedor escalado');
+  };
+  c.printCurrentReport();
+  assert.equal(prints, 1);
+});

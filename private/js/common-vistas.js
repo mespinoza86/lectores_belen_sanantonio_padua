@@ -499,21 +499,14 @@ function renderReport() {
                           a.date === date &&
                           a.substituteIds?.length,
                       )?.substituteIds || [];
-                    return `<div class="report-mass"><h4>${esc(mass.name)} · ${mass.time}</h4><div class="report-roles">${mass.roles.map(role => `<div><span>${esc(role)}:</span> <b>${esc(readerName(assignment(mass.id, role, date)?.readerId))}</b></div>`).join('')}</div><div class="report-reserves"><span>Equipo de apoyo, en orden:</span> <b>${reserves.length ? reserves.map((id, index) => `${index + 1}. ${esc(readerName(id))}`).join(' · ') : 'Sin Equipo de apoyo asignado'}</b></div></div>`;
+                    const free = reportAvailableReaders(mass.id);
+                    return `<div class="report-mass"><h4>${esc(mass.name)} · ${mass.time}</h4><div class="report-roles">${mass.roles.map(role => `<div><span>${esc(role)}:</span> <b>${esc(readerName(assignment(mass.id, role, date)?.readerId))}</b></div>`).join('')}</div><div class="report-reserves"><span>Equipo de apoyo, en orden:</span> <b>${reserves.length ? reserves.map((id, index) => `${index + 1}. ${esc(readerName(id))}`).join(' · ') : 'Sin Equipo de apoyo asignado'}</b></div><div class="report-reserves"><span>Sin asignación · Prefieren esta misa:</span> <b>${esc(free.preferred.join(' · ') || 'Ninguno')}</b></div><div class="report-reserves"><span>Sin asignación · Pueden ayudar:</span> <b>${esc(free.alternative.join(' · ') || 'Ninguno')}</b></div></div>`;
                   })
                   .join('')}`,
             )
             .join('')
         : '<p class="empty">No hay celebraciones para este mes.</p>'
     }<p style="margin-top:35px;color:#718078;font-size:11px">Generado desde el planificador de lectores.</p>`;
-  const reportMasses = Object.values(grouped).flat();
-  document.querySelectorAll('#reportContent .report-mass').forEach((card, index) => {
-    const free = reportAvailableReaders(reportMasses[index].mass.id);
-    card.insertAdjacentHTML(
-      'beforeend',
-      `<div class="report-reserves"><span>Sin asignación · Prefieren esta misa:</span> <b>${esc(free.preferred.join(' · ') || 'Ninguno')}</b></div><div class="report-reserves"><span>Sin asignación · Pueden ayudar:</span> <b>${esc(free.alternative.join(' · ') || 'Ninguno')}</b></div>`,
-    );
-  });
   renderTraditionalReport();
   renderAvailabilityReport();
 }
