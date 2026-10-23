@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "migrate:reader-preferences": "node scripts/migrate-reader-preferences.js --apply",
-    "test": "node --test test/server.test.js test/asignaciones.test.js",
+    "test": "node --test test/server.test.js test/asignaciones.test.js test/reportes.test.js",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

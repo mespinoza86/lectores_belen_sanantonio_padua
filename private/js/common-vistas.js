@@ -506,6 +506,14 @@ function renderReport() {
             .join('')
         : '<p class="empty">No hay celebraciones para este mes.</p>'
     }<p style="margin-top:35px;color:#718078;font-size:11px">Generado desde el planificador de lectores.</p>`;
+  const reportMasses = Object.values(grouped).flat();
+  document.querySelectorAll('#reportContent .report-mass').forEach((card, index) => {
+    const free = reportAvailableReaders(reportMasses[index].mass.id);
+    card.insertAdjacentHTML(
+      'beforeend',
+      `<div class="report-reserves"><span>Sin asignación · Prefieren esta misa:</span> <b>${esc(free.preferred.join(' · ') || 'Ninguno')}</b></div><div class="report-reserves"><span>Sin asignación · Pueden ayudar:</span> <b>${esc(free.alternative.join(' · ') || 'Ninguno')}</b></div>`,
+    );
+  });
   renderTraditionalReport();
   renderAvailabilityReport();
 }

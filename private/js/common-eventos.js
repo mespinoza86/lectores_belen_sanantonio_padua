@@ -158,7 +158,7 @@ document.addEventListener('click', async e => {
   }
   if (e.target.closest('#printReport')) {
     document.body.classList.remove('print-traditional');
-    window.print();
+    printCurrentReport();
   }
   if (e.target.closest('#printTraditionalReport')) printTraditionalReport();
   if (e.target.closest('#downloadTraditionalImage')) downloadTraditionalImage();

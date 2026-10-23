@@ -13,6 +13,56 @@ function traditionalRoleLabel(role) {
           ? 'Monitor'
           : role;
 }
+// Disponibilidad informativa mensual: no crea asignaciones ni depende de Solo apoyo.
+function reportAvailableReaders(massId) {
+  const occupied = new Set();
+  state.assignments
+    .filter(item => item.month === state.month)
+    .forEach(item => {
+      if (item.readerId) occupied.add(item.readerId);
+      (item.substituteIds || []).forEach(id => occupied.add(id));
+    });
+  const free = state.readers
+    .filter(reader => reader.active && !occupied.has(reader.id) && readerCanServeMass(reader, massId))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  return {
+    preferred: free.filter(reader => readerPrefersMass(reader, massId)).map(reader => reader.name),
+    alternative: free.filter(reader => !readerPrefersMass(reader, massId)).map(reader => reader.name),
+  };
+}
+function reportSupportCells(item) {
+  const free = reportAvailableReaders(item.mass.id);
+  const width = (TRADITIONAL_LAYOUT.width - TRADITIONAL_LAYOUT.pad * 2) / 3;
+  return [
+    ['Equipo de apoyo', item.reserves.map((name, index) => `${index + 1}. ${name}`)],
+    ['Sin asignación · Prefieren esta misa', free.preferred],
+    ['Sin asignación · Pueden ayudar', free.alternative],
+  ].map(([title, names]) => ({
+    title,
+    lines: availabilityWrapText(names.join(' · ') || 'Ninguno', width - 28, 18),
+  }));
+}
+function reportSupportHeight(item) {
+  return 36 + Math.max(...reportSupportCells(item).map(cell => cell.lines.length)) * 24 + 12;
+}
+function reportSupportSvg(item, top) {
+  const width = (TRADITIONAL_LAYOUT.width - TRADITIONAL_LAYOUT.pad * 2) / 3;
+  return reportSupportCells(item)
+    .map((cell, index) => {
+      const x = TRADITIONAL_LAYOUT.pad + index * width;
+      return (
+        `<rect x="${x}" y="${top}" width="${width}" height="${reportSupportHeight(item)}" fill="#eef2f8" stroke="#68717b"/>` +
+        traditionalTextSvg(cell.title, x + 14, top + 18, {
+          size: 19,
+          weight: 700,
+          anchor: 'start',
+          fill: '#24405f',
+        }) +
+        availabilityLinesSvg(cell.lines, x + 14, top + 48, { size: 18, lineHeight: 24, fill: '#111' })
+      );
+    })
+    .join('');
+}
 function traditionalReportData() {
   return state.masses
     .filter(mass => mass.active && occurrences(mass).length)
@@ -106,18 +156,13 @@ function traditionalBlockWidth() {
   const layout = TRADITIONAL_LAYOUT;
   return (layout.width - layout.pad * 2 - layout.colGap * 3) / 4;
 }
-function traditionalReserveRows(item) {
-  return Math.max(1, Math.ceil(item.reserves.length / 4));
-}
 function traditionalSectionHeight(item) {
   const layout = TRADITIONAL_LAYOUT;
   return (
     layout.headerH +
     layout.nameH +
     (item.columns[0]?.rows.length || 0) * layout.rowH +
-    layout.reserveLabelH +
-    traditionalReserveRows(item) * layout.reserveRowH +
-    layout.reservePad
+    reportSupportHeight(item)
   );
 }
 function traditionalSectionSvg(item, top) {
@@ -167,41 +212,8 @@ function traditionalSectionSvg(item, top) {
       );
     });
   });
-  const reservesTop = namesTop + layout.nameH + rows * layout.rowH,
-    reservesH = layout.reserveLabelH + traditionalReserveRows(item) * layout.reserveRowH + layout.reservePad;
-  parts.push(
-    `<rect x="${left}" y="${reservesTop}" width="${inner}" height="${reservesH}" fill="#eef2f8" stroke="#1d2733"/>`,
-    traditionalTextSvg('Equipo de apoyo', left + 14, reservesTop + layout.reserveLabelH / 2, {
-      size: 19,
-      weight: 700,
-      anchor: 'start',
-    }),
-  );
-  if (item.reserves.length)
-    item.reserves.forEach((name, index) => {
-      const label = `${index + 1}. ${name}`,
-        x = left + (index % 4) * (blockW + layout.colGap),
-        y =
-          reservesTop +
-          layout.reserveLabelH +
-          Math.floor(index / 4) * layout.reserveRowH +
-          layout.reserveRowH / 2;
-      parts.push(
-        traditionalTextSvg(label, x + blockW / 2, y, {
-          size: traditionalFitSize(label, blockW - 12, 18),
-          weight: 700,
-        }),
-      );
-    });
-  else
-    parts.push(
-      traditionalTextSvg(
-        'Sin Equipo de apoyo asignado',
-        left + inner / 2,
-        reservesTop + layout.reserveLabelH + layout.reserveRowH / 2,
-        { size: 18, fill: '#5c6670' },
-      ),
-    );
+  const reservesTop = namesTop + layout.nameH + rows * layout.rowH;
+  parts.push(reportSupportSvg(item, reservesTop));
   return parts.join('');
 }
 function buildTraditionalSvg(items, fitToPage = false) {
@@ -245,6 +257,29 @@ function traditionalSvgDataUrl(svg) {
   for (let index = 0; index < bytes.length; index += 0x8000)
     binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000));
   return 'data:image/svg+xml;base64,' + btoa(binary);
+}
+function printCurrentReport() {
+  const target = document.createElement('div');
+  target.id = 'currentPrintReport';
+  target.innerHTML = $('#reportContent').innerHTML;
+  const style = document.createElement('style');
+  style.textContent = `#currentPrintReport{position:absolute;left:-10000px;top:0;width:192mm;background:white;color:#111}
+    @media print{@page{size:A4 portrait;margin:8mm}body.print-current-fit>*:not(#currentPrintReport){display:none!important}body.print-current-fit #currentPrintReport{position:static;display:block!important;margin:0 auto}.report-mass{break-inside:auto}}`;
+  document.head.append(style);
+  document.body.append(target);
+  const height = target.getBoundingClientRect().height;
+  target.style.zoom = Math.min(1, (278 * 96) / 25.4 / Math.max(1, height));
+  document.body.classList.add('print-current-fit');
+  window.addEventListener(
+    'afterprint',
+    () => {
+      document.body.classList.remove('print-current-fit');
+      target.remove();
+      style.remove();
+    },
+    { once: true },
+  );
+  window.print();
 }
 function printTraditionalReport() {
   const data = traditionalReportData();
@@ -327,13 +362,13 @@ function availabilityReportData() {
   });
   const substituteIds = new Set([...substitutesByMass.values()].flatMap(ids => [...ids]));
   const substituteGroups = state.masses
-    .filter(mass => substitutesByMass.has(mass.id))
+    .filter(mass => substitutesByMass.has(mass.id) || (mass.active && occurrences(mass).length))
     .sort((a, b) =>
       `${occurrences(a)[0] || ''}${a.time}`.localeCompare(`${occurrences(b)[0] || ''}${b.time}`),
     )
     .map(mass => ({
       mass,
-      readers: [...substitutesByMass.get(mass.id)]
+      readers: [...(substitutesByMass.get(mass.id) || [])]
         .map(readerId => ({ id: readerId, name: readerName(readerId) }))
         .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })),
     }));
@@ -430,9 +465,9 @@ function buildAvailabilityReportSvg(data, fitToPage = false) {
     row(['Sin Equipo de apoyo asignado durante este mes.'], [inner], '#eef2f8');
   data.substituteGroups.forEach(group => {
     row([`${group.mass.name} · ${massSchedule(group.mass)}`], [inner], '#5d9bd3', true);
-    group.readers.forEach((reader, index) =>
-      row([`${index + 1}. ${reader.name}`], [inner], index % 2 ? '#fff' : '#d9e3f3'),
-    );
+    const item = { mass: group.mass, reserves: group.readers.map(reader => reader.name) };
+    parts.push(reportSupportSvg(item, top));
+    top += reportSupportHeight(item);
   });
   top += 24;
   heading('LECTORES SIN ASIGNACIÓN');

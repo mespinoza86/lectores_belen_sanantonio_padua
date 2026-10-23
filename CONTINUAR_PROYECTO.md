@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 2 de octubre de 2026
+Última actualización: 22 de octubre de 2026
 
 ## Objetivo
 
@@ -2347,3 +2347,13 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 
 - **Tamaño de letra del PDF tradicional.** Al caber el mes completo en una hoja, el texto se imprime a unos 6 pt. Si resulta pequeño en papel, se vuelve a dos hojas horizontales con letra casi del doble: es cambiar `pageWidthMm` y `pageHeightMm` y volver a repartir por altura, algo que ya estuvo implementado y está descrito en la sección del SVG.
 - *Cerrada por el calendario el 2 de octubre:* **los cuatro huecos de septiembre de 2026.** El usuario decidió el 22 de septiembre no rellenarlos; septiembre terminó y ya no hay nada que decidir.
+
+## Actualización del 22 de octubre de 2026: disponibles por misa en los reportes
+
+- El usuario pidió incluir, junto al Equipo de apoyo de cada misa, lectores activos sin ninguna asignación en el mes que prefieren esa misa y quienes pueden asistir como alternativa. No se incluyen titulares ni personas de apoyo ya asignadas en otra misa, inactivos o lectores que no puedan asistir. No depende de la casilla Solo apoyo.
+- Se agregó una regla compartida `reportAvailableReaders` que usa las preferencias existentes, incluida la compatibilidad heredada. Una persona libre puede aparecer en varias misas compatibles; es información para contactar, no una asignación ni una confirmación.
+- Tradicional, PNG y reporte de Equipo de apoyo y disponibles usan tres columnas en la banda de apoyo: equipo asignado, sin asignación que prefieren la misa, y sin asignación que pueden ayudar. Se conservan tablas azules, nombres completos con salto de línea, y ajuste proporcional a una sola página A4. Las misas sin equipo asignado también aparecen en el reporte de disponibilidad.
+- El reporte actual por celebración incorpora igualmente ambos grupos. Su impresión prepara una copia aislada y la escala al área útil de una A4, con limpieza al terminar la impresión.
+- **Decisión expresa del usuario: mantener una sola página**, incluso si con muchos nombres se reduce el tamaño de letra. No se implementó paginación múltiple.
+- Se agregaron tres pruebas en `test/reportes.test.js`: filtrado mensual, grupos de disponibilidad en una misa sin apoyo y ajuste del SVG tradicional con listas extensas. La suite incluye este archivo mediante `npm test`.
+- No se modificaron datos de producción ni se desplegó. Pendiente revisar visualmente PDF e imagen con los datos actuales; las pruebas de dimensiones SVG no sustituyen la comprobación de impresión en navegador.
