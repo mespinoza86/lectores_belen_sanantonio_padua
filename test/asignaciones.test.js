@@ -229,6 +229,199 @@ function bancasSinLector(documentos, readerId) {
 
 // --- Generación aleatoria ---------------------------------------------------
 
+for (const modo of ['administrador', 'perfil']) {
+  for (const preferida of [true, false]) {
+    test(`editar teléfono en ${modo} conserva titularidad manual Solo apoyo (${preferida ? 'preferida' : 'alternativa'})`, async () => {
+      const misa = await crearMisa({ nombre: 'Edición de ficha', roles: ['Primera'] });
+      const [apoyo] = await crearLectores(1, preferida ? [misa.id] : [], { substituteOnly: true });
+      const fecha = servidor.massOccurrences(misa, MES)[0];
+      assert.equal(
+        (
+          await api('POST', '/api/assignment-change', {
+            massId: misa.id,
+            role: 'Primera',
+            month: MES,
+            date: fecha,
+            readerId: apoyo.id,
+            previousReaderId: '',
+            scope: 'single',
+            allowSupportOnly: true,
+          })
+        ).status,
+        200,
+      );
+      await db.collection('assignments').updateOne(
+        { massId: misa.id },
+        {
+          $set: {
+            confirmationStatus: 'confirmed',
+            confirmedAt: new Date(),
+            confirmationHistory: [{ readerId: apoyo.id, action: 'confirmed', at: new Date() }],
+          },
+        },
+      );
+      const antes = await asignacionesDelMes();
+      const profile = { ...apoyo, phone: '8888-0000' };
+      const respuesta =
+        modo === 'administrador'
+          ? await api('PUT', `/api/readers/${apoyo.id}`, profile)
+          : await api('POST', `/api/readers/${apoyo.id}/profile`, { password: CLAVE_LECTOR, profile }, false);
+      assert.equal(respuesta.status, 200);
+      assert.deepEqual(
+        await asignacionesDelMes(),
+        antes,
+        'guardar la ficha no debe cambiar puestos, confirmaciones ni historial',
+      );
+      const guardado = await db.collection('readers').findOne({ id: apoyo.id });
+      assert.equal(guardado.phone, '8888-0000');
+      assert.equal(guardado.substituteOnly, true);
+    });
+  }
+
+  test(`editar disponibilidad en ${modo} retira solo puestos futuros incompatibles`, async () => {
+    const misa = await crearMisa({ nombre: 'Disponibilidad', roles: ['Primera'] });
+    const [apoyo] = await crearLectores(1, [misa.id], { substituteOnly: true });
+    const futuro = asignacion({
+      misa,
+      fecha: servidor.massOccurrences(misa, MES)[0],
+      role: 'Primera',
+      readerId: apoyo.id,
+    });
+    const pasado = {
+      ...asignacion({ misa, fecha: '2000-01-02', role: 'Primera', readerId: apoyo.id }),
+      month: '2000-01',
+    };
+    await db.collection('assignments').insertMany([pasado, futuro]);
+    const profile = { ...apoyo, preferredMassIds: [], unavailableMassIds: [misa.id] };
+    const respuesta =
+      modo === 'administrador'
+        ? await api('PUT', `/api/readers/${apoyo.id}`, profile)
+        : await api('POST', `/api/readers/${apoyo.id}/profile`, { password: CLAVE_LECTOR, profile }, false);
+    assert.equal(respuesta.status, 200);
+    assert.equal(await db.collection('assignments').countDocuments({ id: futuro.id }), 0);
+    assert.equal(await db.collection('assignments').countDocuments({ id: pasado.id }), 1);
+  });
+}
+
+test('desactivar Solo apoyo sigue retirando sus puestos futuros y conserva el pasado', async () => {
+  const misa = await crearMisa({ nombre: 'Desactivación', roles: ['Primera'] });
+  const [apoyo] = await crearLectores(1, [misa.id], { substituteOnly: true });
+  const futuro = asignacion({
+    misa,
+    fecha: servidor.massOccurrences(misa, MES)[0],
+    role: 'Primera',
+    readerId: apoyo.id,
+  });
+  const pasado = {
+    ...asignacion({ misa, fecha: '2000-01-02', role: 'Primera', readerId: apoyo.id }),
+    month: '2000-01',
+  };
+  await db.collection('assignments').insertMany([pasado, futuro]);
+  assert.equal((await api('PUT', `/api/readers/${apoyo.id}`, { ...apoyo, active: false })).status, 200);
+  assert.equal(await db.collection('assignments').countDocuments({ id: futuro.id }), 0);
+  assert.equal(await db.collection('assignments').countDocuments({ id: pasado.id }), 1);
+});
+
+test('asignación manual de Solo apoyo respeta disponibilidad, confirmación y alcance', async () => {
+  for (const scope of ['single', 'remaining']) {
+    const misa = await crearMisa({ nombre: `Manual ${scope}`, roles: ['Primera'] });
+    const [titular, apoyo] = await crearLectores(2, [misa.id]);
+    await db.collection('readers').updateOne(
+      { id: apoyo.id },
+      {
+        $set: {
+          substituteOnly: true,
+          // Verificar también alternativas, sin marcar la misa como preferida.
+          preferredMassIds: scope === 'single' ? [misa.id] : [],
+        },
+      },
+    );
+    const fechas = servidor.massOccurrences(misa, MES);
+    await db.collection('assignments').insertMany(
+      fechas.map(fecha =>
+        asignacion({
+          misa,
+          fecha,
+          role: 'Primera',
+          readerId: titular.id,
+          suplentes: [apoyo.id],
+        }),
+      ),
+    );
+    const payload = {
+      massId: misa.id,
+      role: 'Primera',
+      month: MES,
+      date: fechas[1],
+      readerId: apoyo.id,
+      previousReaderId: titular.id,
+      scope,
+    };
+    assert.equal((await api('POST', '/api/assignment-change', payload)).status, 400);
+    assert.equal(
+      (await api('POST', '/api/assignment-change', { ...payload, allowSupportOnly: true }, false)).status,
+      401,
+    );
+    const respuesta = await api('POST', '/api/assignment-change', { ...payload, allowSupportOnly: true });
+    assert.equal(respuesta.status, 200);
+    const documentos = await db.collection('assignments').find({ massId: misa.id, month: MES }).toArray();
+    assert.equal(
+      documentos.filter(a => a.readerId === apoyo.id).length,
+      scope === 'single' ? 1 : fechas.length - 1,
+    );
+    assert.equal(documentos.find(a => a.date === fechas[0]).readerId, titular.id);
+    assert.deepEqual(bancasSinLector(documentos, apoyo.id), []);
+    assert.equal((await db.collection('readers').findOne({ id: apoyo.id })).substituteOnly, true);
+    assert.doesNotThrow(() => servidor.assertReadersBelongToSingleMass(documentos));
+  }
+});
+
+test('ni confirmación manual permite asignar apoyo inactivo o que no puede asistir', async () => {
+  const misa = await crearMisa({ nombre: 'Restricciones', roles: ['Primera'] });
+  for (const extra of [{ active: false }, { unavailableMassIds: [misa.id] }]) {
+    const [apoyo] = await crearLectores(1, [misa.id], { substituteOnly: true, ...extra });
+    const respuesta = await api('POST', '/api/assignment-change', {
+      massId: misa.id,
+      role: 'Primera',
+      month: MES,
+      date: servidor.massOccurrences(misa, MES)[0],
+      readerId: apoyo.id,
+      previousReaderId: '',
+      scope: 'single',
+      allowSupportOnly: true,
+    });
+    assert.equal(respuesta.status, 400);
+  }
+  assert.deepEqual(await asignacionesDelMes(), []);
+});
+
+test('generador aleatorio reserva Solo apoyo para la banca', async () => {
+  const misa = await crearMisa({ nombre: 'Automática', roles: ['Primera'] });
+  const [normal] = await crearLectores(1, [misa.id]);
+  const [apoyo] = await crearLectores(1, [misa.id], { substituteOnly: true });
+  assert.equal(
+    (await api('POST', '/api/random-assignments', { month: MES, allowSupportOnly: true })).status,
+    201,
+  );
+  const documentos = await asignacionesDelMes();
+  assert.ok(documentos.length);
+  assert.ok(documentos.every(a => a.readerId === normal.id && a.substituteIds.includes(apoyo.id)));
+});
+
+test('Asignar no asignados nunca usa Solo apoyo como titular aunque queden huecos', async () => {
+  const misa = await crearMisa({ nombre: 'Rellenar', roles: ['Primera', 'Salmo'] });
+  await crearLectores(1, [misa.id]);
+  const apoyos = await crearLectores(3, [misa.id], { substituteOnly: true });
+  assert.equal(
+    (await api('POST', '/api/fill-unassigned', { month: MES, allowSupportOnly: true })).status,
+    200,
+  );
+  const documentos = await asignacionesDelMes();
+  assert.ok(documentos.length);
+  assert.ok(documentos.every(a => !apoyos.some(r => r.id === a.readerId)));
+  assert.ok(documentos.length < servidor.massOccurrences(misa, MES).length * 2);
+});
+
 test('la generación aleatoria cubre el mes y respeta una misa por persona', async () => {
   const primera = await crearMisa({ nombre: 'Misa A', weekday: 0, roles: ['Primera', 'Salmo'] });
   const segunda = await crearMisa({ nombre: 'Misa B', weekday: 6, roles: ['Primera', 'Salmo'] });

@@ -105,3 +105,14 @@ test('PDF actual imprime sin copia reducida ni ajuste a una sola hoja', () => {
   c.printCurrentReport();
   assert.equal(prints, 1);
 });
+
+test('selector manual identifica Solo Equipo de apoyo y separa preferidas y alternativas', () => {
+  const c = fixture();
+  vm.runInContext(fs.readFileSync('private/js/common-vistas.js', 'utf8'), c);
+  c.state.readers[0].substituteOnly = true;
+  const options = c.assignmentReaderOptions(c.state.readers, 'm', 'a');
+  assert.match(options, /Preferida — Solo Equipo de apoyo · Preferida/);
+  assert.match(options, /Alternativa — Solo Equipo de apoyo · Alternativa/);
+  assert.match(options, /value="a" selected/);
+  assert.doesNotMatch(options, /Inactiva|Imposible|No preferida/);
+});

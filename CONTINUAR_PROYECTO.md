@@ -2376,3 +2376,21 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 - La ruta continúa exigiendo sesión administrativa. El campo nuevo no se envía al público; las contraseñas siguen almacenadas como hash y se exige cambiar la temporal antes de confirmar o editar datos.
 - Pruebas de integración nuevas contra MongoDB en memoria: permisos, invalidación de la contraseña anterior, cambio propio, conservación del historial tras restablecer y compatibilidad con registros antiguos. No se cambiaron contraseñas reales ni se desplegó. Falta revisión visual en navegador.
 - Verificación: **49 pruebas aprobadas, 0 fallidas**, formato correcto, sintaxis de `server.js` correcta y `git diff --check` sin errores antes de actualizar esta bitácora.
+
+### Asignación manual de personas configuradas solo como apoyo
+
+- El usuario autorizó que Administrador → Asignaciones permita elegir como titular a una persona con `substituteOnly: true` tras acordarlo con ella. Debe estar activa y tener la misa como preferida o alternativa; **No puedo asistir** sigue excluyendo la opción y bloqueando la escritura en el servidor.
+- Los selectores muestran **Nombre — Solo Equipo de apoyo · Preferida/Alternativa**. Se cambió la antigua etiqueta ambigua «No preferida» por «Alternativa». La selección actual se conserva visible después de guardar una excepción manual.
+- Antes de elegir el alcance se pide confirmar la excepción. La petición a `/api/assignment-change` incluye `allowSupportOnly: true`; el servidor rechaza a una persona Solo apoyo si falta esa confirmación. La ruta sigue protegida para administradores.
+- Se respeta el alcance existente: **solo esta celebración** o **fechas restantes**, siguiendo los puestos de la persona reemplazada o las vacantes. No cambia la configuración Solo apoyo del lector. Se mantiene la limpieza mensual de las bancas para que nadie sea titular y apoyo a la vez, así como el comportamiento existente que retira titularidades en otras misas del mismo mes.
+- **Asignar aleatoriamente** y **Asignar no asignados** siguen excluyendo a Solo apoyo de puestos titulares. La excepción se aplica únicamente a la edición del tablero de Asignaciones; no se amplió el desplegable de reemplazos de Inicio ni las otras rutas de escritura.
+- Verificación: **54 pruebas aprobadas, 0 fallidas**, formato, sintaxis y diff correctos. Nuevas pruebas cubren confirmación y permisos, ambos alcances, preferencias y alternativas, inactivos e imposibilidad de asistir, limpieza de bancas, etiquetas del selector y exclusión de titularidades en ambos procesos automáticos.
+- No se modificaron datos de producción ni se desplegó. Pendiente revisión visual del selector y del diálogo en navegador.
+
+### Conservar las titularidades manuales al guardar la ficha
+
+- Se detectó y corrigió una interacción con la excepción anterior: guardar una ficha con Solo apoyo activado eliminaba todas las titularidades futuras, aunque únicamente se cambiara el teléfono. Ocurría tanto en la edición administrativa como en Editar mis datos.
+- Las dos rutas ahora retiran solo titularidades futuras de misas a las que la persona ya no puede asistir (incluida la desactivación administrativa). Solo apoyo deja de ser motivo para borrar asignaciones existentes: limita la asignación automática, pero conserva los acuerdos manuales. Marcar esa casilla tampoco cancela por sí solo puestos existentes.
+- Se conservan íntegros los documentos de asignaciones compatibles: titular, fecha, estado de confirmación e historial. Las restricciones nuevas y la desactivación siguen afectando únicamente al futuro, sin reescribir el pasado.
+- Regresión reproducida antes del arreglo con cuatro pruebas fallidas: edición administrativa y personal, tanto para misa preferida como alternativa. Tras corregir las dos rutas, las cuatro pasan; otras tres pruebas comprueban retirada por imposibilidad de asistir y desactivación, conservando el pasado.
+- Verificación final: **61 pruebas aprobadas, 0 fallidas**, formato, sintaxis y diff correctos (solo advertencia LF/CRLF de la bitácora). Las pruebas usan MongoDB en memoria; no se modificaron datos reales ni se desplegó.

@@ -488,6 +488,16 @@ $('#assignmentBoard')?.addEventListener('change', async e => {
   if (!e.target.matches('.assign-select')) return;
   const select = e.target,
     { mass, role, date, reader: previousReaderId } = select.dataset;
+  const supportOnly = state.readers.find(reader => reader.id === select.value)?.substituteOnly === true;
+  if (
+    supportOnly &&
+    !confirm(
+      'Esta persona está configurada solo como Equipo de apoyo. ¿Asignarla como titular con el alcance que elijas a continuación?',
+    )
+  ) {
+    select.value = previousReaderId;
+    return;
+  }
   const scope = await chooseAssignmentScope(select);
   if (!scope) {
     select.value = previousReaderId;
@@ -504,6 +514,7 @@ $('#assignmentBoard')?.addEventListener('change', async e => {
         readerId: select.value,
         previousReaderId,
         scope,
+        allowSupportOnly: supportOnly,
       }),
     });
     const detail = scope === 'remaining' && result.changed > 1 ? ` en ${result.changed} celebraciones` : '';

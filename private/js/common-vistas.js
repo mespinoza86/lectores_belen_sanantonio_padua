@@ -171,12 +171,13 @@ function renderPendingReports() {
   }</div>`;
 }
 function assignmentReaderOptions(readers, massId, selectedId = '') {
+  readers = readers.filter(reader => reader.active && readerCanServeMass(reader, massId));
   const groups = [
     ['Misa preferida', readers.filter(reader => readerPrefersMass(reader, massId)), 'Preferida'],
     [
       'Disponible como alternativa',
       readers.filter(reader => !readerPrefersMass(reader, massId)),
-      'No preferida',
+      'Alternativa',
     ],
   ];
   return groups
@@ -187,7 +188,7 @@ function assignmentReaderOptions(readers, massId, selectedId = '') {
           .sort((a, b) => a.name.localeCompare(b.name, 'es'))
           .map(
             reader =>
-              `<option value="${reader.id}" ${reader.id === selectedId ? 'selected' : ''}>${esc(reader.name)} · ${status}</option>`,
+              `<option value="${esc(reader.id)}" ${reader.id === selectedId ? 'selected' : ''}>${esc(reader.name)}${reader.substituteOnly ? ' — Solo Equipo de apoyo' : ''} · ${status}</option>`,
           )
           .join('')}</optgroup>`,
     )
@@ -300,9 +301,7 @@ function renderAssignments() {
   $('#assignmentBoard').innerHTML = masses.length
     ? masses
         .map(m => {
-          const titularReaders = state.readers.filter(
-            r => r.active && !r.substituteOnly && readerCanServeMass(r, m.id),
-          );
+          const titularReaders = state.readers.filter(r => r.active && readerCanServeMass(r, m.id));
           const dates = occurrences(m);
           const datePlans = dates
             .map(date => {

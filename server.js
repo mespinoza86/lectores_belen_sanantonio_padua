@@ -364,8 +364,11 @@ async function changeManualAssignment(input) {
   let reader = null;
   if (readerId) {
     reader = await database.collection('readers').findOne({ id: readerId, active: true });
-    if (!reader || reader.substituteOnly || !readerCanServeMass(reader, massId)) {
-      throw new Error(reader?.substituteOnly ? 'Este lector está configurado únicamente como persona de apoyo' : reader && !readerCanServeMass(reader, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Lector inválido');
+    if (!reader || !readerCanServeMass(reader, massId)) {
+      throw new Error(reader && !readerCanServeMass(reader, massId) ? 'Este lector indicó que no puede asistir a esta misa' : 'Lector inválido');
+    }
+    if (reader.substituteOnly && input.allowSupportOnly !== true) {
+      throw new Error('Debes confirmar la asignación manual de esta persona configurada solo como Equipo de apoyo');
     }
   }
 
@@ -1086,9 +1089,9 @@ async function api(req, res, url) {
       const today = costaRicaDateTime().slice(0, 10);
       const allowedMassIds = await database.collection('masses').find({ active: true }).project({ id: 1 }).toArray();
       const serviceableMassIds = value.active ? allowedMassIds.map(item => item.id).filter(massId => !value.unavailableMassIds.includes(massId)) : [];
-      const titularFilter = value.substituteOnly
-        ? { readerId: id, date: { $gte: today } }
-        : { readerId: id, date: { $gte: today }, massId: { $nin: serviceableMassIds } };
+      // Solo apoyo limita la generación automática; las excepciones manuales
+      // siguen vigentes mientras el lector pueda asistir a esta misa.
+      const titularFilter = { readerId: id, date: { $gte: today }, massId: { $nin: serviceableMassIds } };
       await Promise.all([
         database.collection('assignments').deleteMany(titularFilter),
         database.collection('assignments').updateMany(
@@ -1354,9 +1357,7 @@ async function api(req, res, url) {
       if (resource === 'readers') {
         const masses = await database.collection('masses').find({ active: true }).project({ id: 1 }).toArray();
         const allowedMassIds = value.active ? masses.map(item => item.id).filter(massId => !value.unavailableMassIds.includes(massId)) : [];
-        const titularFilter = value.active && !value.substituteOnly
-          ? { readerId: id, date: { $gte: today }, massId: { $nin: allowedMassIds } }
-          : { readerId: id, date: { $gte: today } };
+        const titularFilter = { readerId: id, date: { $gte: today }, massId: { $nin: allowedMassIds } };
         await Promise.all([
           database.collection('assignments').deleteMany(titularFilter),
           database.collection('assignments').updateMany({ date: { $gte: today }, massId: { $nin: allowedMassIds }, substituteIds: id }, { $pull: { substituteIds: id } })
