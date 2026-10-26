@@ -111,6 +111,54 @@ test.beforeEach(async () => {
 
 // --- Utilidades -------------------------------------------------------------
 
+test('contraseña temporal: permisos, historial permanente y cambio personal obligatorio', async () => {
+  const [lector] = await crearLectores(1, [], { hasSetOwnPassword: false, mustChangePassword: true });
+  const ruta = `/api/readers/${lector.id}/reset-password`;
+  assert.equal((await api('POST', ruta, {}, false)).status, 401);
+  let respuesta = await api('POST', ruta, {});
+  assert.equal(respuesta.status, 200);
+  const temporal = (await respuesta.json()).temporaryPassword;
+  let guardado = await db.collection('readers').findOne({ id: lector.id });
+  assert.equal(guardado.hasSetOwnPassword, false);
+  assert.equal(guardado.mustChangePassword, true);
+  assert.equal(await bcrypt.compare(CLAVE_LECTOR, guardado.passwordHash), false);
+  assert.equal(await bcrypt.compare(temporal, guardado.passwordHash), true);
+  respuesta = await api(
+    'POST',
+    `/api/readers/${lector.id}/password`,
+    {
+      currentPassword: temporal,
+      newPassword: 'Personal-nueva-123',
+      confirmPassword: 'Personal-nueva-123',
+    },
+    false,
+  );
+  assert.equal(respuesta.status, 200);
+  guardado = await db.collection('readers').findOne({ id: lector.id });
+  assert.equal(guardado.hasSetOwnPassword, true);
+  const fecha = guardado.passwordChangedAt;
+  assert.equal((await api('POST', ruta, {})).status, 200);
+  guardado = await db.collection('readers').findOne({ id: lector.id });
+  assert.equal(guardado.hasSetOwnPassword, true);
+  assert.equal(guardado.mustChangePassword, true);
+  assert.deepEqual(guardado.passwordChangedAt, fecha);
+  const publicos = await (await api('GET', '/api/readers', undefined, false)).json();
+  assert.equal('hasSetOwnPassword' in publicos.find(r => r.id === lector.id), false);
+});
+
+test('restablecer lectores antiguos conserva evidencia y no inventa un historial nuevo', async () => {
+  for (const [extra, esperado] of [
+    [{ mustChangePassword: true }, null],
+    [{ mustChangePassword: false }, true],
+    [{ mustChangePassword: true, passwordChangedAt: new Date() }, true],
+  ]) {
+    const [lector] = await crearLectores(1, [], extra);
+    assert.equal((await api('POST', `/api/readers/${lector.id}/reset-password`, {})).status, 200);
+    const guardado = await db.collection('readers').findOne({ id: lector.id });
+    assert.equal(guardado.hasSetOwnPassword, esperado);
+  }
+});
+
 function api(metodo, ruta, cuerpo, conCookie = true) {
   return fetch(base + ruta, {
     method: metodo,

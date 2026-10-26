@@ -484,6 +484,7 @@ function publicDoc(document, hidePrivateReaderData = false) {
     delete value.mustChangePassword;
     delete value.passwordChangedAt;
     delete value.passwordResetAt;
+    delete value.hasSetOwnPassword;
   }
   return value;
 }
@@ -1046,6 +1047,7 @@ async function api(req, res, url) {
           $set: {
             passwordHash: await readerPasswordHash(newPassword),
             mustChangePassword: false,
+            hasSetOwnPassword: true,
             passwordChangedAt: new Date()
           }
         }
@@ -1131,16 +1133,21 @@ async function api(req, res, url) {
   }
   if (resource === 'readers' && id && action === 'reset-password' && req.method === 'POST') {
     try {
+      const reader = await database.collection('readers').findOne({ id });
+      if (!reader) return json(res, 404, { error: 'Lector no encontrado' });
+      // Los registros antiguos sin evidencia quedan desconocidos, no como nuevos.
+      const hasSetOwnPassword = reader.hasSetOwnPassword === true || reader.passwordChangedAt || reader.mustChangePassword === false
+        ? true : reader.hasSetOwnPassword === false ? false : null;
       const temporaryPassword = temporaryReaderPassword();
       const updated = await database.collection('readers').findOneAndUpdate(
         { id },
         {
           $set: {
             passwordHash: await readerPasswordHash(temporaryPassword),
+            hasSetOwnPassword,
             mustChangePassword: true,
             passwordResetAt: new Date()
-          },
-          $unset: { passwordChangedAt: '' }
+          }
         },
         { returnDocument: 'after' }
       );
@@ -1327,6 +1334,7 @@ async function api(req, res, url) {
       const document = { id: crypto.randomUUID(), ...value,
         ...(resource === 'readers' ? {
           passwordHash: await readerPasswordHash(temporaryPassword),
+          hasSetOwnPassword: false,
           mustChangePassword: true,
           passwordResetAt: new Date()
         } : {}),

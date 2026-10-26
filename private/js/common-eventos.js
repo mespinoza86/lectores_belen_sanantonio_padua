@@ -45,7 +45,7 @@ document.addEventListener('click', async e => {
   if (resetPasswordButton) {
     if (
       !confirm(
-        `¿Invalidar la contraseña actual de ${resetPasswordButton.dataset.name} y generar una temporal nueva?`,
+        `¿Generar una contraseña temporal para ${resetPasswordButton.dataset.name}? La contraseña anterior, incluso si era temporal y estaba pendiente de cambio, dejará de funcionar. Deberás entregar la nueva en privado.`,
       )
     )
       return;

@@ -41,7 +41,7 @@ function showTemporaryPassword(readerNameValue, password) {
     dialog = document.createElement('dialog');
     dialog.id = 'temporaryPasswordDialog';
     dialog.innerHTML =
-      '<form method="dialog"><div class="dialog-head"><div><p class="eyebrow">CREDENCIAL TEMPORAL</p><h3>Contraseña creada</h3></div><button class="icon-btn close" type="button">×</button></div><p id="temporaryPasswordReader"></p><label>Contraseña temporal<input id="temporaryPasswordValue" readonly></label><p class="hint">Cópiala ahora y entrégala de forma privada. No podrá volver a consultarse y el lector deberá cambiarla antes de confirmar una asignación.</p><div class="actions"><button class="secondary" id="copyTemporaryPassword" type="button">Copiar</button><button class="primary" value="close">Entendido</button></div></form>';
+      '<form method="dialog"><div class="dialog-head"><div><p class="eyebrow">CREDENCIAL TEMPORAL</p><h3>Contraseña creada</h3></div><button class="icon-btn close" type="button">×</button></div><p id="temporaryPasswordReader"></p><label>Contraseña temporal<input id="temporaryPasswordValue" readonly></label><p class="hint">Cópiala ahora y entrégala de forma privada. No podrá volver a consultarse. El lector debe abrir Lectores → Cambiar contraseña y usar esta temporal como contraseña actual para crear la suya. Debe hacerlo antes de confirmar una asignación o editar sus datos.</p><div class="actions"><button class="secondary" id="copyTemporaryPassword" type="button">Copiar</button><button class="primary" value="close">Entendido</button></div></form>';
     document.body.append(dialog);
   }
   $('#temporaryPasswordReader').textContent = readerNameValue;

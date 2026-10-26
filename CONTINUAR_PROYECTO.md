@@ -1,6 +1,6 @@
 # Continuidad del proyecto Lectores
 
-Última actualización: 22 de octubre de 2026
+Última actualización: 26 de octubre de 2026
 
 ## Objetivo
 
@@ -2366,3 +2366,13 @@ Lista viva de lo pendiente. Está al final a propósito, para poder responder de
 - Se agregó una prueba que impide volver a crear el contenedor reducido al imprimir PDF actual. La suite anterior había terminado con 45 pruebas aprobadas y formato correcto.
 - Verificación final de este ajuste: **47 pruebas aprobadas, 0 fallidas**, `npm run format:check` correcto y `git diff --check` sin errores (solo advertencia de conversión LF/CRLF en la bitácora).
 - No se cambian asignaciones ni datos de producción. La revisión visual de impresión en navegador y el despliegue siguen pendientes.
+
+## Actualización del 26 de octubre de 2026: contraseña temporal y restablecimiento
+
+- La función administrativa de generar una temporal ya existía. Se adaptó su presentación: en Lectores, el botón dice **Generar contraseña temporal** cuando consta que nunca se estableció una contraseña propia, y **Restablecer contraseña** cuando ya se estableció o no hay información histórica suficiente. Las confirmaciones de misa no determinan el texto.
+- Nuevo campo administrativo `hasSetOwnPassword`: las altas nuevas lo reciben en `false`; un cambio personal correcto lo fija en `true` permanentemente. Restablecer conserva ese indicador y ya no borra `passwordChangedAt`.
+- Compatibilidad con datos antiguos: fecha de cambio o `mustChangePassword: false` son evidencia positiva. Sin evidencia ni indicador previo se conserva estado desconocido (`null` al restablecer), no se supone que nunca tuvo contraseña propia. No se ejecutó una migración de producción.
+- Se conserva la etiqueta **Cambio de contraseña pendiente**. La confirmación advierte que la contraseña anterior, incluso temporal, dejará de funcionar. El diálogo explica cómo usar la temporal en Lectores → Cambiar contraseña y entregarla en privado.
+- La ruta continúa exigiendo sesión administrativa. El campo nuevo no se envía al público; las contraseñas siguen almacenadas como hash y se exige cambiar la temporal antes de confirmar o editar datos.
+- Pruebas de integración nuevas contra MongoDB en memoria: permisos, invalidación de la contraseña anterior, cambio propio, conservación del historial tras restablecer y compatibilidad con registros antiguos. No se cambiaron contraseñas reales ni se desplegó. Falta revisión visual en navegador.
+- Verificación: **49 pruebas aprobadas, 0 fallidas**, formato correcto, sintaxis de `server.js` correcta y `git diff --check` sin errores antes de actualizar esta bitácora.
